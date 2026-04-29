@@ -1,6 +1,6 @@
 # Restaurant Reservation Notifier
 
-Python script to monitor restaurant availability on Resy and send notifications.
+Python script to monitor restaurant availability on Resy and OpenTable and send notifications.
 
 ## Requirements
 
@@ -57,7 +57,9 @@ Edit `restaurants.py` to add restaurants you want to monitor:
 RESTAURANTS = [
     {
         "name": "Nobu Malibu",
-        "resy_venue_id": "1234",
+        "source": "resy",  # or "opentable"
+        "resy_venue_id": "1234",  # For Resy
+        "opentable_rid": "12345",  # For OpenTable
         "party_size": 2,
         "days": ["Friday", "Saturday"],
         "time_range": ("18:00", "22:00"),  # Optional
@@ -68,6 +70,15 @@ RESTAURANTS = [
 ### Finding Resy Venue IDs
 
 1. Go to the restaurant's Resy page (e.g., `https://resy.com/venues/nobu-malibu`)
+2. Open Developer Tools (F12) → Network tab
+3. Look for API requests to `api.resy.com`
+4. Find the venue ID in the request URL or response
+
+### Finding OpenTable Restaurant IDs
+
+1. Go to the restaurant's OpenTable page (e.g., `https://opentable.com/r/nobu-malibu`)
+2. The restaurant ID (rid) is in the URL after `/r/`
+3. Or open Developer Tools and look for requests to `platform.opentable.com`
 2. Open Developer Tools (F12) → Network tab
 3. Look for API requests to `api.resy.com`
 4. Find the venue ID in the request URL or response

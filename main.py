@@ -120,6 +120,47 @@ def check_resy_availability(venue_id: str, party_size: int, date: str) -> list:
         return []
 
 
+def check_opentable_availability(rid: str, party_size: int, date: str) -> list:
+    """
+    Check OpenTable for available reservations.
+    
+    Args:
+        rid: OpenTable restaurant ID
+        party_size: Number of guests
+        date: Date in YYYY-MM-DD format
+    
+    Returns:
+        List of available time slots
+    """
+    url = "https://platform.opentable.com/v1/restaurants/availability"
+    params = {
+        "rid": rid,
+        "partySize": party_size,
+        "date": date,
+    }
+    headers = {
+        "Content-Type": "application/json",
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        slots = []
+        for slot in data.get("availability", []):
+            slots.append({
+                "date": slot.get("date", ""),
+                "time": slot.get("time", ""),
+                "datetime": f"{date}T{slot.get('time', '')}:00",
+            })
+        
+        return slots
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error checking OpenTable availability: {e}")
+        return []
+
+
 def get_date_for_day(day_name: str) -> Optional[str]:
     """Get the next occurrence of a specific day of the week."""
     days_map = {
@@ -198,7 +239,12 @@ def send_email_notification(restaurant: dict, slots: list) -> bool:
     for slot in slots:
         body += f"  - {slot.get('datetime', 'N/A')}\n"
     
-    body += f"\nBook now at: https://resy.com/venues/{restaurant['resy_venue_id']}"
+    # Add booking link based on source
+    source = restaurant.get("source", "resy").lower()
+    if source == "opentable":
+        body += f"\nBook now at: https://opentable.com/r/{restaurant.get('opentable_rid')}"
+    else:
+        body += f"\nBook now at: https://resy.com/venues/{restaurant.get('resy_venue_id')}"
     
     msg = MIMEMultipart()
     msg["From"] = from_email
@@ -279,10 +325,16 @@ def send_notification(restaurant: dict, slots: list) -> None:
 
 def check_restaurant(restaurant: dict, seen_slots: set) -> list:
     """Check a single restaurant for availability."""
-    venue_id = restaurant.get("resy_venue_id")
+    source = restaurant.get("source", "resy").lower()
     party_size = restaurant.get("party_size", 2)
     days = restaurant.get("days", [])
     time_range = restaurant.get("time_range")
+    
+    # Get the appropriate venue ID based on source
+    if source == "opentable":
+        venue_id = restaurant.get("opentable_rid")
+    else:
+        venue_id = restaurant.get("resy_venue_id")
     
     if not venue_id:
         logger.warning(f"Missing venue_id for {restaurant.get('name', 'Unknown')}")
@@ -295,9 +347,13 @@ def check_restaurant(restaurant: dict, seen_slots: set) -> list:
         if not date:
             continue
         
-        logger.info(f"Checking {restaurant['name']} for {day} ({date})")
+        logger.info(f"Checking {restaurant['name']} ({source}) for {day} ({date})")
         
-        slots = check_resy_availability(venue_id, party_size, date)
+        # Check availability based on source
+        if source == "opentable":
+            slots = check_opentable_availability(venue_id, party_size, date)
+        else:
+            slots = check_resy_availability(venue_id, party_size, date)
         
         if time_range:
             slots = filter_slots_by_time(slots, time_range)
