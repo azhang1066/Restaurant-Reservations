@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Restaurant Reservation Availability Notifier
-Monitors Resy for available reservations and sends notifications.
+Monitors Resy and OpenTable for available reservations and sends notifications.
 """
 
 import argparse
@@ -10,7 +10,7 @@ import logging
 import os
 import smtplib
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -21,6 +21,7 @@ import schedule
 from dotenv import load_dotenv
 
 import restaurants
+from resy_api import create_resy_client, create_opentable_client, TimeSlot
 
 # Load environment variables
 load_dotenv()
@@ -67,7 +68,7 @@ def get_seen_slot_key(venue_id: str, date: str, time: str, party_size: int) -> s
 
 
 def get_resy_headers() -> dict:
-    """Get headers for Resy API requests."""
+    """Get headers for Resy API requests (maintained for compatibility)."""
     api_key = os.getenv("RESY_API_KEY")
     auth_token = os.getenv("RESY_AUTH_TOKEN")
     
@@ -81,7 +82,7 @@ def get_resy_headers() -> dict:
     }
 
 
-def check_resy_availability(venue_id: str, party_size: int, date: str) -> list:
+def check_resy_availability(venue_id: str, party_size: int, date: str) -> list[TimeSlot]:
     """
     Check Resy for available reservations.
     
@@ -93,34 +94,11 @@ def check_resy_availability(venue_id: str, party_size: int, date: str) -> list:
     Returns:
         List of available time slots
     """
-    url = "https://api.resy.com/4/venue/availability"
-    params = {
-        "venue_id": venue_id,
-        "party_size": party_size,
-        "date": date,
-    }
-    
-    try:
-        response = requests.get(url, headers=get_resy_headers(), params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        
-        slots = []
-        for result in data.get("results", []):
-            for slot in result.get("slots", []):
-                slots.append({
-                    "date": slot.get("date", {}).get("start", ""),
-                    "time": slot.get("date", {}).get("short_date", ""),
-                    "datetime": slot.get("date", {}).get("start", ""),
-                })
-        
-        return slots
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error checking Resy availability: {e}")
-        return []
+    client = create_resy_client()
+    return client.get_availability(venue_id, party_size, date)
 
 
-def check_opentable_availability(rid: str, party_size: int, date: str) -> list:
+def check_opentable_availability(rid: str, party_size: int, date: str) -> list[TimeSlot]:
     """
     Check OpenTable for available reservations.
     
@@ -132,33 +110,8 @@ def check_opentable_availability(rid: str, party_size: int, date: str) -> list:
     Returns:
         List of available time slots
     """
-    url = "https://platform.opentable.com/v1/restaurants/availability"
-    params = {
-        "rid": rid,
-        "partySize": party_size,
-        "date": date,
-    }
-    headers = {
-        "Content-Type": "application/json",
-    }
-    
-    try:
-        response = requests.get(url, headers=headers, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        
-        slots = []
-        for slot in data.get("availability", []):
-            slots.append({
-                "date": slot.get("date", ""),
-                "time": slot.get("time", ""),
-                "datetime": f"{date}T{slot.get('time', '')}:00",
-            })
-        
-        return slots
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error checking OpenTable availability: {e}")
-        return []
+    client = create_opentable_client()
+    return client.get_availability(rid, party_size, date)
 
 
 def get_date_for_day(day_name: str) -> Optional[str]:
@@ -184,14 +137,12 @@ def get_date_for_day(day_name: str) -> Optional[str]:
         days_ahead += 7
     
     next_date = today.replace(hour=0, minute=0, second=0, microsecond=0)
-    next_date = next_date.replace(hour=0)
-    from datetime import timedelta
     next_date = next_date + timedelta(days=days_ahead)
     
     return next_date.strftime("%Y-%m-%d")
 
 
-def filter_slots_by_time(slots: list, time_range: tuple) -> list:
+def filter_slots_by_time(slots: list[TimeSlot], time_range: Optional[tuple]) -> list[TimeSlot]:
     """Filter slots by time range."""
     if not time_range:
         return slots
@@ -200,23 +151,17 @@ def filter_slots_by_time(slots: list, time_range: tuple) -> list:
     filtered = []
     
     for slot in slots:
-        time_str = slot.get("datetime", "")
-        if not time_str:
-            continue
-        
-        # Extract time from ISO format (e.g., "2024-01-15T19:00:00")
         try:
-            slot_time = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
-        except ValueError:
+            slot_time = slot.time  # TimeSlot already has formatted time
+            if start_time <= slot_time <= end_time:
+                filtered.append(slot)
+        except (ValueError, AttributeError):
             continue
-        
-        if start_time <= slot_time <= end_time:
-            filtered.append(slot)
     
     return filtered
 
 
-def send_email_notification(restaurant: dict, slots: list) -> bool:
+def send_email_notification(restaurant: dict, slots: list[TimeSlot]) -> bool:
     """Send email notification about available slots."""
     smtp_host = os.getenv("SMTP_HOST")
     smtp_port = os.getenv("SMTP_PORT")
@@ -237,7 +182,7 @@ def send_email_notification(restaurant: dict, slots: list) -> bool:
     body += "Available slots:\n"
     
     for slot in slots:
-        body += f"  - {slot.get('datetime', 'N/A')}\n"
+        body += f"  - {slot.datetime}\n"
     
     # Add booking link based on source
     source = restaurant.get("source", "resy").lower()
@@ -265,7 +210,7 @@ def send_email_notification(restaurant: dict, slots: list) -> bool:
         return False
 
 
-def send_pushover_notification(restaurant: dict, slots: list) -> bool:
+def send_pushover_notification(restaurant: dict, slots: list[TimeSlot]) -> bool:
     """Send Pushover notification about available slots."""
     token = os.getenv("PUSHOVER_TOKEN")
     user = os.getenv("PUSHOVER_USER")
@@ -279,7 +224,7 @@ def send_pushover_notification(restaurant: dict, slots: list) -> bool:
     
     message = f"Found {len(slots)} available slot(s) at {restaurant['name']}!\n"
     for slot in slots[:5]:  # Limit to first 5 slots
-        message += f"  - {slot.get('datetime', 'N/A')}\n"
+        message += f"  - {slot.datetime}\n"
     if len(slots) > 5:
         message += f"  ... and {len(slots) - 5} more"
     
@@ -308,7 +253,7 @@ def send_pushover_notification(restaurant: dict, slots: list) -> bool:
         return False
 
 
-def send_notification(restaurant: dict, slots: list) -> None:
+def send_notification(restaurant: dict, slots: list[TimeSlot]) -> None:
     """Send notification via all configured channels."""
     if not slots:
         return
@@ -323,7 +268,7 @@ def send_notification(restaurant: dict, slots: list) -> None:
         logger.warning(f"No notifications sent for {restaurant['name']}")
 
 
-def check_restaurant(restaurant: dict, seen_slots: set) -> list:
+def check_restaurant(restaurant: dict, seen_slots: set) -> list[TimeSlot]:
     """Check a single restaurant for availability."""
     source = restaurant.get("source", "resy").lower()
     party_size = restaurant.get("party_size", 2)
@@ -364,7 +309,7 @@ def check_restaurant(restaurant: dict, seen_slots: set) -> list:
             slot_key = get_seen_slot_key(
                 venue_id,
                 date,
-                slot.get("datetime", ""),
+                slot.datetime,
                 party_size,
             )
             if slot_key not in seen_slots:
