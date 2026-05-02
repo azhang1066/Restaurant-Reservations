@@ -41,3 +41,63 @@
 2026-05-01 23:29:31,175 - INFO - 127.0.0.1 - - [01/May/2026 23:29:31] "GET /api/restaurants HTTP/1.1" 200 -
 2026-05-01 23:29:31,487 - INFO - 127.0.0.1 - - [01/May/2026 23:29:31] "GET /api/settings HTTP/1.1" 200 -
 2026-05-01 23:29:31,488 - INFO - 127.0.0.1 - - [01/May/2026 23:29:31] "GET /api/logs HTTP/1.1" 200 -
+2026-05-01 23:37:09,011 - INFO - Starting scheduler thread
+2026-05-01 23:37:09,013 - INFO - Starting availability check
+2026-05-01 23:37:09,020 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.156:5000
+2026-05-01 23:37:09,020 - INFO - [33mPress CTRL+C to quit[0m
+2026-05-01 23:37:09,028 - INFO - Checking Nobu Malibu (resy) for Friday (2026-05-08) party_size=2
+2026-05-01 23:37:09,037 - WARNING - Resy credentials not configured
+2026-05-01 23:37:09,766 - ERROR - HTTP error 419
+2026-05-01 23:37:09,767 - INFO - Checking Nobu Malibu (resy) for Saturday (2026-05-02) party_size=2
+2026-05-01 23:37:09,779 - WARNING - Resy credentials not configured
+2026-05-01 23:37:10,367 - ERROR - HTTP error 419
+2026-05-01 23:37:10,368 - INFO - Availability check complete
+2026-05-01 23:37:25,626 - INFO - 127.0.0.1 - - [01/May/2026 23:37:25] "GET /api/logs HTTP/1.1" 200 -
+2026-05-01 23:37:48,988 - INFO - Starting scheduler thread
+2026-05-01 23:37:48,989 - INFO - Starting availability check
+2026-05-01 23:37:49,002 - INFO - Checking Nobu Malibu (resy) for Friday (2026-05-08) party_size=2
+2026-05-01 23:37:49,012 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.156:5000
+2026-05-01 23:37:49,013 - INFO - [33mPress CTRL+C to quit[0m
+2026-05-01 23:37:49,015 - WARNING - Resy credentials not configured
+2026-05-01 23:37:49,602 - ERROR - HTTP error 419
+2026-05-01 23:37:49,604 - INFO - Checking Nobu Malibu (resy) for Saturday (2026-05-02) party_size=2
+2026-05-01 23:37:49,615 - WARNING - Resy credentials not configured
+2026-05-01 23:37:50,219 - ERROR - HTTP error 419
+2026-05-01 23:37:50,220 - INFO - Availability check complete
+2026-05-01 23:38:10,326 - INFO - 127.0.0.1 - - [01/May/2026 23:38:10] "GET / HTTP/1.1" 200 -
+2026-05-01 23:38:10,529 - INFO - 127.0.0.1 - - [01/May/2026 23:38:10] "GET /static/app.js HTTP/1.1" 200 -
+2026-05-01 23:38:10,537 - INFO - 127.0.0.1 - - [01/May/2026 23:38:10] "GET /static/style.css HTTP/1.1" 200 -
+2026-05-01 23:38:10,550 - INFO - 127.0.0.1 - - [01/May/2026 23:38:10] "GET /api/settings HTTP/1.1" 200 -
+2026-05-01 23:38:10,576 - INFO - 127.0.0.1 - - [01/May/2026 23:38:10] "GET /api/restaurants HTTP/1.1" 200 -
+2026-05-01 23:38:10,578 - INFO - 127.0.0.1 - - [01/May/2026 23:38:10] "GET /api/logs HTTP/1.1" 200 -
+2026-05-01 23:38:10,605 - INFO - 127.0.0.1 - - [01/May/2026 23:38:10] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-05-01 23:38:25,295 - INFO - 127.0.0.1 - - [01/May/2026 23:38:25] "GET /api/logs HTTP/1.1" 200 -
+2026-05-01 23:39:25,634 - INFO - 127.0.0.1 - - [01/May/2026 23:39:25] "GET /api/logs HTTP/1.1" 200 -
+2026-05-01 23:40:25,298 - INFO - 127.0.0.1 - - [01/May/2026 23:40:25] "GET /api/logs HTTP/1.1" 200 -
+2026-05-01 23:41:00,536 - INFO - Starting scheduler thread
+2026-05-01 23:41:00,537 - INFO - Starting availability check
+2026-05-01 23:41:00,547 - INFO - Checking Nobu Malibu (resy) for Friday (2026-05-08) party_size=2
+2026-05-01 23:41:00,557 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.156:5000
+2026-05-01 23:41:00,557 - INFO - [33mPress CTRL+C to quit[0m
+2026-05-01 23:41:00,558 - WARNING - Resy credentials not configured
+2026-05-01 23:41:01,130 - ERROR - HTTP error 419
+2026-05-01 23:41:01,131 - INFO - Checking Nobu Malibu (resy) for Saturday (2026-05-02) party_size=2
+2026-05-01 23:41:01,139 - WARNING - Resy credentials not configured
+2026-05-01 23:41:01,709 - ERROR - HTTP error 419
+2026-05-01 23:41:01,711 - INFO - Availability check complete
+2026-05-01 23:41:06,738 - INFO - 127.0.0.1 - - [01/May/2026 23:41:06] "GET /api/logs HTTP/1.1" 200 -
+2026-05-01 23:41:06,994 - INFO - 127.0.0.1 - - [01/May/2026 23:41:06] "GET / HTTP/1.1" 200 -
+2026-05-01 23:41:07,142 - INFO - 127.0.0.1 - - [01/May/2026 23:41:07] "GET /static/style.css HTTP/1.1" 200 -
+2026-05-01 23:41:07,341 - INFO - 127.0.0.1 - - [01/May/2026 23:41:07] "GET /static/app.js HTTP/1.1" 200 -
+2026-05-01 23:41:07,357 - INFO - 127.0.0.1 - - [01/May/2026 23:41:07] "GET /api/restaurants HTTP/1.1" 200 -
+2026-05-01 23:41:07,677 - INFO - 127.0.0.1 - - [01/May/2026 23:41:07] "GET /api/settings HTTP/1.1" 200 -
+2026-05-01 23:41:07,681 - INFO - 127.0.0.1 - - [01/May/2026 23:41:07] "GET /api/logs HTTP/1.1" 200 -

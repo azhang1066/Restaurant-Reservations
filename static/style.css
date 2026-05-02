@@ -223,6 +223,32 @@ body {
   color: #d1d5db;
 }
 
+.days-time-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.day-time-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.day-time-row input[type="checkbox"] {
+  margin: 0;
+}
+
+.day-time-row label {
+  min-width: 80px;
+  font-size: 0.95rem;
+  color: #d1d5db;
+}
+
+.day-time-row input[type="time"] {
+  flex: 1;
+}
+
 .time-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

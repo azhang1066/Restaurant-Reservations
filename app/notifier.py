@@ -29,9 +29,7 @@ def check_restaurant(restaurant: dict, seen_slots: set) -> list:
     source = restaurant.get("source", "resy").lower()
     party_sizes = restaurant.get("party_sizes") or [2]
     days = restaurant.get("days") or []
-    time_range = None
-    if restaurant.get("time_earliest") and restaurant.get("time_latest"):
-        time_range = (restaurant["time_earliest"], restaurant["time_latest"])
+    time_ranges = restaurant.get("time_ranges") or {}
 
     if source == "opentable":
         venue_id = restaurant.get("opentable_rid")
@@ -51,6 +49,10 @@ def check_restaurant(restaurant: dict, seen_slots: set) -> list:
             date = get_date_for_day(day)
             if not date:
                 continue
+
+            time_range = None
+            if time_ranges.get(day):
+                time_range = tuple(time_ranges[day])
 
             logger.info(f"Checking {restaurant['name']} ({source}) for {day} ({date}) party_size={party_size}")
             db.add_activity_log(
@@ -105,12 +107,16 @@ def run_check() -> None:
         if not restaurant.get("enabled", True):
             continue
 
-        slots = check_restaurant(restaurant, seen_slots)
-        if slots:
-            send_notification(restaurant, slots)
-            db.add_activity_log(
-                f"Sent notification for {restaurant['name']}", "info", highlight=True
-            )
+        try:
+            slots = check_restaurant(restaurant, seen_slots)
+            if slots:
+                send_notification(restaurant, slots)
+                db.add_activity_log(
+                    f"Sent notification for {restaurant['name']}", "info", highlight=True
+                )
+        except Exception as e:
+            logger.error(f"Error checking {restaurant['name']}: {e}")
+            db.add_activity_log(f"Error checking {restaurant['name']}: {e}", "error")
 
     save_seen_slots(seen_slots)
     logger.info("Availability check complete")
@@ -121,11 +127,15 @@ def start_scheduler() -> None:
     db.init_db()
     db.ensure_migrated(restaurant_config.RESTAURANTS)
     logger.info("Starting scheduler thread")
-    run_check()
-    schedule.every(restaurant_config.CHECK_INTERVAL_MINUTES).minutes.do(run_check)
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    try:
+        run_check()
+        schedule.every(restaurant_config.CHECK_INTERVAL_MINUTES).minutes.do(run_check)
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+    except Exception as e:
+        logger.error(f"Scheduler error: {e}")
+        db.add_activity_log(f"Scheduler error: {e}", "error")
 
 
 def start_background_scheduler() -> threading.Thread:

@@ -32,12 +32,18 @@ def init_db() -> sqlite3.Connection:
                 days TEXT NOT NULL,
                 time_earliest TEXT,
                 time_latest TEXT,
+                time_ranges TEXT,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
             """
         )
+        # Add time_ranges column if it doesn't exist (for migration)
+        try:
+            conn.execute("ALTER TABLE restaurants ADD COLUMN time_ranges TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS activity_log (
@@ -71,6 +77,12 @@ def _deserialize_list(value: Optional[str]) -> List[Any]:
 
 
 def _row_to_restaurant(row: sqlite3.Row) -> Dict[str, Any]:
+    time_ranges = _deserialize_list(row["time_ranges"]) if row["time_ranges"] else {}
+    # Backward compatibility: if time_ranges is empty and old fields exist, convert
+    if not time_ranges and (row["time_earliest"] or row["time_latest"]):
+        # Assume the time range applies to all selected days
+        days = _deserialize_list(row["days"])
+        time_ranges = {day: [row["time_earliest"], row["time_latest"]] for day in days if row["time_earliest"] or row["time_latest"]}
     return {
         "id": row["id"],
         "name": row["name"],
@@ -79,8 +91,9 @@ def _row_to_restaurant(row: sqlite3.Row) -> Dict[str, Any]:
         "opentable_rid": row["opentable_rid"],
         "party_sizes": _deserialize_list(row["party_sizes"]),
         "days": _deserialize_list(row["days"]),
-        "time_earliest": row["time_earliest"],
-        "time_latest": row["time_latest"],
+        "time_earliest": row["time_earliest"],  # Keep for compatibility
+        "time_latest": row["time_latest"],  # Keep for compatibility
+        "time_ranges": time_ranges,
         "enabled": bool(row["enabled"]),
     }
 
@@ -105,9 +118,9 @@ def add_restaurant(restaurant: Dict[str, Any]) -> int:
             """
             INSERT INTO restaurants (
                 name, source, resy_venue_id, opentable_rid,
-                party_sizes, days, time_earliest, time_latest,
+                party_sizes, days, time_earliest, time_latest, time_ranges,
                 enabled, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 restaurant["name"],
@@ -118,6 +131,7 @@ def add_restaurant(restaurant: Dict[str, Any]) -> int:
                 _serialize_list(restaurant.get("days", [])),
                 restaurant.get("time_earliest"),
                 restaurant.get("time_latest"),
+                _serialize_list(restaurant.get("time_ranges", {})),
                 int(restaurant.get("enabled", True)),
                 now,
                 now,
@@ -141,6 +155,7 @@ def update_restaurant(restaurant_id: int, restaurant: Dict[str, Any]) -> bool:
                 days = ?,
                 time_earliest = ?,
                 time_latest = ?,
+                time_ranges = ?,
                 enabled = ?,
                 updated_at = ?
             WHERE id = ?
@@ -154,6 +169,7 @@ def update_restaurant(restaurant_id: int, restaurant: Dict[str, Any]) -> bool:
                 _serialize_list(restaurant.get("days", [])),
                 restaurant.get("time_earliest"),
                 restaurant.get("time_latest"),
+                _serialize_list(restaurant.get("time_ranges", {})),
                 int(restaurant.get("enabled", True)),
                 now,
                 restaurant_id,

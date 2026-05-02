@@ -72,6 +72,7 @@ def create_restaurant():
         "days": payload.get("days", []),
         "time_earliest": payload.get("time_earliest"),
         "time_latest": payload.get("time_latest"),
+        "time_ranges": payload.get("time_ranges", {}),
         "enabled": payload.get("enabled", True),
     }
 
@@ -96,6 +97,7 @@ def update_restaurant(restaurant_id: int):
             "days": payload.get("days", restaurant.get("days", [])),
             "time_earliest": payload.get("time_earliest", restaurant.get("time_earliest")),
             "time_latest": payload.get("time_latest", restaurant.get("time_latest")),
+            "time_ranges": payload.get("time_ranges", restaurant.get("time_ranges", {})),
             "enabled": payload.get("enabled", restaurant.get("enabled", True)),
         }
     )

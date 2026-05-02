@@ -17,7 +17,7 @@ const elements = {
   resyId: document.getElementById("resy-id"),
   opentableId: document.getElementById("opentable-id"),
   partySizes: document.getElementById("party-sizes"),
-  daysCheckboxes: document.getElementById("days-checkboxes"),
+  daysTimeGrid: document.getElementById("days-time-grid"),
   timeEarliest: document.getElementById("time-earliest"),
   timeLatest: document.getElementById("time-latest"),
 };
@@ -32,24 +32,51 @@ function showMessage(element, text, type = "success") {
   }, 5000);
 }
 
-function buildDaysCheckboxes(container, selectedDays = []) {
+function buildDaysTimeGrid(container, selectedDays = [], timeRanges = {}) {
   container.innerHTML = "";
   dayNames.forEach((day) => {
-    const label = document.createElement("label");
+    const dayDiv = document.createElement("div");
+    dayDiv.className = "day-time-row";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.value = day;
-    if (selectedDays.includes(day)) checkbox.checked = true;
-    label.appendChild(checkbox);
-    label.appendChild(document.createTextNode(day.slice(0, 3)));
-    container.appendChild(label);
+    checkbox.checked = selectedDays.includes(day);
+    const label = document.createElement("label");
+    label.textContent = day;
+    const earliestInput = document.createElement("input");
+    earliestInput.type = "time";
+    earliestInput.placeholder = "Earliest";
+    const latestInput = document.createElement("input");
+    latestInput.type = "time";
+    latestInput.placeholder = "Latest";
+    if (timeRanges[day]) {
+      earliestInput.value = timeRanges[day][0] || "";
+      latestInput.value = timeRanges[day][1] || "";
+    }
+    dayDiv.appendChild(checkbox);
+    dayDiv.appendChild(label);
+    dayDiv.appendChild(earliestInput);
+    dayDiv.appendChild(latestInput);
+    container.appendChild(dayDiv);
   });
 }
 
-function getSelectedDays(container) {
-  return Array.from(container.querySelectorAll("input[type=checkbox]:checked")).map(
-    (input) => input.value
-  );
+function getSelectedDaysAndTimes(container) {
+  const days = [];
+  const timeRanges = {};
+  container.querySelectorAll(".day-time-row").forEach((row) => {
+    const checkbox = row.querySelector("input[type=checkbox]");
+    const inputs = row.querySelectorAll("input[type=time]");
+    if (checkbox.checked) {
+      days.push(checkbox.value);
+      const earliest = inputs[0].value;
+      const latest = inputs[1].value;
+      if (earliest || latest) {
+        timeRanges[checkbox.value] = [earliest, latest];
+      }
+    }
+  });
+  return { days, timeRanges };
 }
 
 function normalizePartySizes(value) {
@@ -90,11 +117,12 @@ function renderRestaurantCard(restaurant) {
 
   const body = document.createElement("div");
   body.className = "card-body";
+  const timeRangesText = Object.entries(restaurant.time_ranges || {}).map(([day, times]) => `${day}: ${times ? times.join(' — ') : 'Any'}`).join(', ') || 'Any';
   body.innerHTML = `
     <div class="summary-row">
       <div class="summary-item"><strong>Party sizes</strong><br>${restaurant.party_sizes.join(", ")}</div>
       <div class="summary-item"><strong>Days</strong><br>${restaurant.days.join(", ")}</div>
-      <div class="summary-item"><strong>Time window</strong><br>${restaurant.time_earliest || "Any"} — ${restaurant.time_latest || "Any"}</div>
+      <div class="summary-item"><strong>Time ranges</strong><br>${timeRangesText}</div>
     </div>
   `;
 
@@ -110,18 +138,8 @@ function renderRestaurantCard(restaurant) {
       <input class="edit-party-sizes" value="${restaurant.party_sizes.join(", ")}" />
     </div>
     <div class="form-group">
-      <label>Days</label>
-      <div class="checkbox-grid edit-days"></div>
-    </div>
-    <div class="form-group time-row">
-      <div>
-        <label>Earliest</label>
-        <input type="time" class="edit-earliest" value="${restaurant.time_earliest || ""}" />
-      </div>
-      <div>
-        <label>Latest</label>
-        <input type="time" class="edit-latest" value="${restaurant.time_latest || ""}" />
-      </div>
+      <label>Days and Time Ranges</label>
+      <div class="days-time-grid edit-days-time"></div>
     </div>
     <div class="edit-actions">
       <button class="button button-primary save-btn">Save</button>
@@ -133,8 +151,8 @@ function renderRestaurantCard(restaurant) {
   card.appendChild(header);
   card.appendChild(body);
 
-  const editDays = editPanel.querySelector(".edit-days");
-  buildDaysCheckboxes(editDays, restaurant.days);
+  const editDaysTime = editPanel.querySelector(".edit-days-time");
+  buildDaysTimeGrid(editDaysTime, restaurant.days, restaurant.time_ranges);
 
   header.querySelector(".toggle-btn").addEventListener("click", async () => {
     const updated = await apiFetch(`/api/restaurants/${restaurant.id}`, {
@@ -159,12 +177,12 @@ function renderRestaurantCard(restaurant) {
   });
 
   editPanel.querySelector(".save-btn").addEventListener("click", async () => {
+    const { days, timeRanges } = getSelectedDaysAndTimes(editDaysTime);
     const payload = {
       name: editPanel.querySelector(".edit-name").value.trim(),
       party_sizes: normalizePartySizes(editPanel.querySelector(".edit-party-sizes").value),
-      days: getSelectedDays(editDays),
-      time_earliest: editPanel.querySelector(".edit-earliest").value || null,
-      time_latest: editPanel.querySelector(".edit-latest").value || null,
+      days: days,
+      time_ranges: timeRanges,
       enabled: restaurant.enabled,
     };
     await apiFetch(`/api/restaurants/${restaurant.id}`, {
@@ -249,15 +267,16 @@ function handleSourceChange() {
 async function submitRestaurantForm(event) {
   event.preventDefault();
 
+  const { days, timeRanges } = getSelectedDaysAndTimes(elements.daysTimeGrid);
+
   const payload = {
     name: elements.restaurantName.value.trim(),
     source: elements.restaurantSource.value,
     resy_venue_id: elements.restaurantSource.value === "resy" ? elements.resyId.value.trim() : null,
     opentable_rid: elements.restaurantSource.value === "opentable" ? elements.opentableId.value.trim() : null,
     party_sizes: normalizePartySizes(elements.partySizes.value),
-    days: getSelectedDays(elements.daysCheckboxes),
-    time_earliest: elements.timeEarliest.value || null,
-    time_latest: elements.timeLatest.value || null,
+    days: days,
+    time_ranges: timeRanges,
     enabled: true,
   };
 
@@ -285,7 +304,7 @@ async function submitRestaurantForm(event) {
 
   showMessage(elements.resolveResult, "Restaurant added successfully.", "success");
   elements.restaurantForm.reset();
-  buildDaysCheckboxes(elements.daysCheckboxes);
+  buildDaysTimeGrid(elements.daysTimeGrid);
   handleSourceChange();
   loadRestaurants();
 }
@@ -309,7 +328,7 @@ async function saveSettings(event) {
 }
 
 async function initialize() {
-  buildDaysCheckboxes(elements.daysCheckboxes);
+  buildDaysTimeGrid(elements.daysTimeGrid);
   handleSourceChange();
   loadRestaurants();
   loadLogs();
