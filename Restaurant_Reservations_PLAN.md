@@ -1,0 +1,162 @@
+# Restaurant Reservations Plan
+
+## Overview
+
+A self-hosted Python/Flask application that monitors Resy and OpenTable for available reservation slots and delivers real-time push and email notifications with one-tap booking deep links. The user manages a watchlist of restaurants (with per-day time windows and party sizes) from a web dashboard on their local network. When a matching slot appears, a push notification fires immediately with a pre-filled URL that drops the user into the booking confirmation screen before the slot disappears.
+
+**Stack:** Python 3.11+, Flask, SQLite, `schedule`, `httpx`, `requests`, `python-dotenv`  
+**Push providers:** ntfy (default, free, no account) · Pushover (alternative)  
+**Booking platforms:** Resy · OpenTable  
+**Run:** `python -m app` or `python run_dashboard.py` → http://localhost:5000
+
+---
+
+## General Work Plan
+
+The project is built as a single Python package (`app/`) with a Flask web server that:
+1. Serves the management dashboard (add/edit/delete restaurants, notification settings, live activity log)
+2. Spawns a background daemon thread running `schedule` to check API availability on a configurable interval (default 20 min)
+3. Sends push notifications via an abstracted `notifiers/` package and email via SMTP when new slots are found
+
+Key architectural decisions:
+- **SQLite only** — no external database; `restaurants.db` holds all state
+- **Notification deduplication** via a `notified_slots` table (not a JSON file); re-notifies if a slot disappears and reappears
+- **Deep links** built in `deep_links.py`, validated with a 2-second HEAD request before sending, falling back to homepage if unreachable
+- **Provider abstraction** — `NOTIFY_PROVIDER=ntfy|pushover` env var selects the active push implementation with zero code changes
+- **Settings in `.env`** — all credentials/toggles written by the dashboard UI to `.env` via `_save_env()`
+
+---
+
+## Implementation Stages
+
+### Stage 1 — Core Monitoring Engine ✅
+- `main.py` — CLI entry point with `--test` and `--test-notify` flags
+- `resy_api.py` — `ResyAPIClient`, `OpenTableAPIClient`, `TimeSlot` dataclass
+- `restaurants.py` — static config (migrated to DB; kept for backward compat)
+- `lookup_venue.py` — Resy/OpenTable URL parser + name-based venue search
+
+### Stage 2 — Flask Dashboard ✅
+- `app/app.py` — REST API (restaurants CRUD, settings, logs, resolve-url, deep-link, test-notification)
+- `app/db.py` — SQLite layer: `restaurants`, `activity_log`, `notified_slots` tables
+- `app/notifier.py` — background scheduler, `check_restaurant()`, per-slot push + batch email
+- `templates/index.html` — 4-panel dashboard: Add Restaurant / Watchlist / Activity Log / Notification Settings
+- `static/app.js` — all frontend logic (no framework)
+- `static/style.css` — dark theme
+
+### Stage 3 — Mobile Push Notifications ✅
+- `notifiers/` package: `BaseNotifier` ABC, `NtfyNotifier`, `PushoverNotifier`, `get_notifier()` factory
+- Provider selected via `NOTIFY_PROVIDER` env var; defaults to ntfy
+- ntfy: POST to `ntfy.sh/{topic}` — high priority, fork_and_knife tag, Click URL
+- Pushover: POST to api.pushover.net — priority 1, url/url_title fields
+- Settings UI: provider dropdown, ntfy topic with subscribe link + copy button, Pushover fields, Email/Push toggles, "Send test notification" button
+- `NTFY_TOPIC` auto-generated on first dashboard load and persisted to `.env`
+
+### Stage 4 — Smart Notification Deduplication ✅
+- `notified_slots` SQLite table: `(venue_id, date, time, party_size)` composite PK
+- `has_notified_slot()`, `add_notified_slot()`, `remove_stale_notified_slots()` in `db.py`
+- Stale removal: slots no longer in the API response are evicted → re-notified if they return
+- Replaced `seen_slots.json` file tracking; file still exists on disk but is no longer written to
+- Log states: ✅ sent · 🔁 skipped · 🔍 nothing found · ❌ failed
+
+### Stage 5 — Deep Link Booking URLs ✅
+- `deep_links.py` — `build_booking_url(platform, venue, slot) → {web_url, app_url, fallback_url}`
+- HEAD validation (2 s timeout) on every candidate URL; falls back to restaurant homepage on failure/timeout
+- Resy format: `resy.com/venues/{slug}/{venue_id}?date=YYYY-MM-DD&seats=N` (slug derived from restaurant name)
+- OpenTable format: `opentable.com/r/{rid}?covers=N&dateTime=YYYY-MM-DDTHH:MM`
+- No public native app scheme found for either platform; `app_url == web_url`
+- ntfy: `Click` header = `web_url`; `Actions` header would add "Open App" if `app_url` ever differs
+- Pushover: `url` = `web_url`, `url_title` = "Book Now"
+- Activity log entries with a URL show a **Book Now →** pill link in the dashboard
+- Each watchlist card has a **Test link** button → calls `/api/restaurants/{id}/deep-link` and opens in new tab
+- CLI: `python deep_links.py --platform resy --venue-id 12345 --venue-name "Carbone" --date 2026-05-09 --time 20:00 --party-size 2`
+
+### Stage 6 — End-to-End Testing & Hardening 🔲
+- Live test with a real Resy and OpenTable restaurant
+- Verify Resy deep link format resolves correctly (the slug-based URL is reverse-engineered)
+- Consider storing `resy_url` or `resy_slug` in the restaurant record if HEAD validation falls back too often
+- Add unit tests for `deep_links.py` and `notifiers/`
+- Prune old `seen_slots.json` reference / delete the file
+- Fix dashboard status pill (currently stuck on "Loading…")
+
+### Stage 7 — Dashboard UX Polish 🔲
+- "Check Now" button to trigger an immediate availability run from the UI
+- Log auto-pruning (keep last 500 entries; currently grows indefinitely)
+- Scheduler status indicator (last check time, next check time)
+- Availability count badge on watchlist cards
+- *Design note: consult a design-focused tool for layout/visual decisions before building*
+
+---
+
+## Completed This Session
+
+**Session date:** 2026-05-01
+
+### Push notification abstraction (Stage 3)
+- Created `notifiers/` package: `base.py` (ABC + `format_slot_body()`), `ntfy.py`, `pushover.py`, `__init__.py`
+- Added `notified_slots` table to SQLite; replaced `seen_slots.json` deduplication logic
+- Refactored `app/notifier.py`: per-slot push, batched email, ✅🔁🔍❌ log states
+- Updated `app/app.py`: new settings keys, NTFY_TOPIC auto-generation, `/api/test-notification` endpoint
+- Updated settings panel UI: provider dropdown, ntfy subscribe link with copy button, Pushover fields, Email/Push toggles, test notification button
+- Added `--test-notify` CLI flag to `main.py`
+- Updated `requirements.txt` (added `httpx>=0.27.0`), `.env.example`, `README.md`
+
+### Deep link booking URLs (Stage 5)
+- Created `deep_links.py` with `build_booking_url()`, `_validate_url()` (HEAD, 2 s timeout), and standalone CLI
+- Updated `notifiers/base.py`: `send()` now accepts `urls: dict` instead of a string; body appends "— tap to book"
+- Updated `notifiers/ntfy.py` and `notifiers/pushover.py` to use `urls["web_url"]`
+- Added `url TEXT` column to `activity_log` (backward-compatible ALTER TABLE)
+- Updated `add_activity_log()` to accept optional `url=` kwarg
+- Updated `app/notifier.py` to call `build_booking_url()` per slot and store URL in log
+- Added `/api/restaurants/<id>/deep-link` endpoint to `app/app.py`
+- Updated `static/app.js`: "Book Now →" link on log entries, "Test link" button on restaurant cards
+- Updated `static/style.css`: `.book-now-link` pill style
+- Updated `README.md` with "Deep Link Booking URLs" section and CLI examples
+
+---
+
+## Next Actions
+
+These are ready to pick up immediately in the next session with no additional context required.
+
+### Priority 1 — Verify Resy deep link format
+The Resy URL `resy.com/venues/{slug}/{venue_id}?date=...&seats=...` is reverse-engineered from `lookup_venue.py` output, not confirmed against a live browser session.
+
+**Steps:**
+1. Add a real Resy restaurant to the watchlist via the dashboard URL resolver
+2. Click the **Test link** button on that restaurant card; observe what URL opens and whether it pre-fills date/party size correctly
+3. If the URL 404s or redirects to the homepage, investigate:
+   - Option A: Add a `resy_slug` TEXT column to the `restaurants` table and parse it from the URL in `lookup_venue.py`'s `parse_resy_url()` (returns slug in `path_parts[1]` already — just needs to be stored)
+   - Option B: Use `resy.com/cities/{city}/venues/{slug}` format (requires storing city too)
+4. Update `deep_links._resy_candidate()` with the confirmed format
+
+### Priority 2 — Clean up `seen_slots.json`
+`seen_slots.json` still exists on disk and `main.py` still reads/writes it for the standalone CLI path. The `app/notifier.py` scheduler no longer uses it.
+
+**Steps:**
+1. In `main.py`'s `check_restaurant()` function, replace the `seen_slots` set approach with `db.has_notified_slot()` / `db.add_notified_slot()` (same pattern as `app/notifier.py`)
+2. Remove calls to `load_seen_slots()` / `save_seen_slots()` from `main.py`'s `run_check()`
+3. Delete `seen_slots.json` from the repo
+
+### Priority 3 — Fix dashboard status pill
+The header shows "Loading…" forever. Wire it to scheduler state.
+
+**Steps:**
+1. Add a `GET /api/status` endpoint in `app/app.py` returning `{"last_check": ISO_TS, "next_check": ISO_TS, "restaurant_count": N}`
+2. Track `last_check_time` as a module-level variable in `app/notifier.py`, updated at the end of each `run_check()`
+3. In `static/app.js`, call `/api/status` on load and every 30 s; update the `#status-pill` text to show "Last check: 2 min ago"
+
+### Priority 4 — Add log pruning
+The `activity_log` table grows without bound.
+
+**Steps:**
+1. In `app/db.py`, after each `add_activity_log()` insert, run:
+   `DELETE FROM activity_log WHERE id NOT IN (SELECT id FROM activity_log ORDER BY id DESC LIMIT 500)`
+2. Or add a scheduled nightly prune job in `app/notifier.py`
+
+### Priority 5 — "Check Now" button
+Allow triggering an immediate availability check from the dashboard without waiting for the scheduler interval.
+
+**Steps:**
+1. Add `POST /api/check-now` endpoint in `app/app.py` that calls `run_check()` in a background thread (to avoid blocking the HTTP response)
+2. Add a **Check Now** button to the dashboard header in `templates/index.html`
+3. Wire it in `static/app.js`: POST to `/api/check-now`, show a brief "Checking…" state, then refresh logs after 3 s
