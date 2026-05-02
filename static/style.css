@@ -402,6 +402,90 @@ body {
   color: #a5b4fc;
 }
 
+.chip-input-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.98);
+  min-height: 48px;
+  align-items: center;
+  cursor: text;
+}
+
+.chip-input-container:focus-within {
+  border-color: rgba(99, 102, 241, 0.7);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 6px 4px 8px;
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.18);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  color: #c7d2fe;
+  font-size: 0.85rem;
+  user-select: none;
+}
+
+.chip-ordinal {
+  color: #818cf8;
+  font-size: 0.72rem;
+  margin-right: 2px;
+}
+
+.chip-value {
+  font-weight: 700;
+  margin-right: 2px;
+}
+
+.chip-btn {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #818cf8;
+  padding: 0 2px;
+  font-size: 0.85rem;
+  line-height: 1;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.chip-btn:hover:not(:disabled) {
+  color: #a5b4fc;
+}
+
+.chip-btn:disabled {
+  color: #374151;
+  cursor: default;
+}
+
+.chip-input-wrap {
+  flex: 1;
+  min-width: 90px;
+}
+
+.chip-text-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #e5e7eb;
+  padding: 4px 6px;
+  font-size: 0.9rem;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.chip-text-input::-webkit-outer-spin-button,
+.chip-text-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
 @media (max-width: 920px) {
   .dashboard-grid {
     grid-template-columns: 1fr;

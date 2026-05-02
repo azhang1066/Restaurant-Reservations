@@ -1,6 +1,6 @@
 # Restaurant Reservation Notifier
 
-Automated Python application to monitor Resy and OpenTable for restaurant availability and send real-time notifications via email and Pushover.
+Automated Python application to monitor Resy and OpenTable for restaurant availability and send real-time notifications via push and email. Monitors a priority-ordered list of party sizes per restaurant — if a table for 4 opens you get notified immediately; if only a table for 2 is available, that fires instead without duplicating the alert.
 
 ## Features
 
@@ -22,10 +22,10 @@ Automated Python application to monitor Resy and OpenTable for restaurant availa
 - Single-check test mode for debugging
 
 🎯 **Advanced Filtering**
-- Filter by party size
+- Priority-ordered party sizes — check for a table of 4 first, fall back to 2 if unavailable; no duplicate notifications for the same slot
 - Filter by days of week
-- Filter by preferred time range
-- Persistent state tracking
+- Per-day time windows (e.g. Friday 6–9 pm, Saturday 7–10 pm)
+- Persistent state tracking — re-notifies only if a slot disappears and reappears
 
 ## Architecture
 
@@ -180,12 +180,11 @@ http://192.168.1.18:5000
 
 The dashboard includes:
 
-- restaurant watchlist management
-- add restaurants by URL
-- per-restaurant party sizes, days, and time window settings
-- enable/disable and delete controls
-- live activity log with availability events
-- SMTP and Pushover notification configuration
+- restaurant watchlist management (add by URL, edit, enable/disable, delete)
+- priority-ordered party sizes — chip-style input where each chip shows its priority order (1st, 2nd…); reorder with ↑/↓, remove with ×
+- per-day time windows (e.g. Friday 6–9 pm only)
+- live activity log with availability events and **Book Now →** deep links
+- push and email notification configuration
 
 ## Deep Link Booking URLs
 
@@ -251,27 +250,26 @@ The utility supports:
 
 ## Restaurant Configuration
 
-Edit `restaurants.py` to add restaurants you want to monitor:
+The recommended way to manage restaurants is through the web dashboard (URL resolver auto-fills the venue ID). For scripted/bulk setup you can also edit `restaurants.py` directly:
 
 ```python
 RESTAURANTS = [
-    # Resy restaurant example
+    # Resy — check for 4 first, fall back to 2
     {
         "name": "Carbone",
         "source": "resy",
         "resy_venue_id": "1234567",
-        "party_size": 2,
+        "party_sizes": [4, 2],          # priority order: 4 preferred, 2 as fallback
         "days": ["Friday", "Saturday"],
-        "time_range": ("18:00", "22:00"),  # Optional: filter by time
+        "time_range": ("18:00", "22:00"),
     },
-    # OpenTable restaurant example
+    # OpenTable — single size is fine too
     {
         "name": "The Spotted Pig",
         "source": "opentable",
         "opentable_rid": "12345",
-        "party_size": 4,
+        "party_sizes": [2],
         "days": ["Friday", "Saturday", "Sunday"],
-        # time_range is optional
     },
 ]
 ```
@@ -280,13 +278,15 @@ RESTAURANTS = [
 
 | Option | Required | Description | Example |
 |--------|----------|-------------|---------|
-| `name` | Yes | Restaurant name | "Carbone" |
-| `source` | No | "resy" or "opentable" | "resy" |
-| `resy_venue_id` | If source="resy" | Resy venue ID | "1234567" |
-| `opentable_rid` | If source="opentable" | OpenTable restaurant ID | "12345" |
-| `party_size` | Yes | Number of guests | 2, 3, 4, etc. |
-| `days` | Yes | Days to check (full names) | ["Friday", "Saturday"] |
-| `time_range` | No | Time window in 24h format | ("18:00", "22:00") |
+| `name` | Yes | Restaurant name | `"Carbone"` |
+| `source` | Yes | `"resy"` or `"opentable"` | `"resy"` |
+| `resy_venue_id` | If source="resy" | Resy venue ID | `"1234567"` |
+| `opentable_rid` | If source="opentable" | OpenTable restaurant ID | `"12345"` |
+| `party_sizes` | Yes | Priority-ordered list of party sizes (1–20) | `[4, 2]` |
+| `days` | Yes | Days to check (full names) | `["Friday", "Saturday"]` |
+| `time_range` | No | Time window in 24h format | `("18:00", "22:00")` |
+
+`party_sizes` is checked in order: the scheduler queries the API for each size and fires a notification as soon as a match is found, skipping smaller sizes for any slot that already triggered an alert for a larger size.
 
 ### Finding Restaurant IDs
 

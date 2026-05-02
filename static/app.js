@@ -16,7 +16,7 @@ const elements = {
   opentableIdGroup: document.getElementById("opentable-id-group"),
   resyId: document.getElementById("resy-id"),
   opentableId: document.getElementById("opentable-id"),
-  partySizes: document.getElementById("party-sizes"),
+  partySizesChips: document.getElementById("party-sizes-chips"),
   daysTimeGrid: document.getElementById("days-time-grid"),
   timeEarliest: document.getElementById("time-earliest"),
   timeLatest: document.getElementById("time-latest"),
@@ -79,13 +79,89 @@ function getSelectedDaysAndTimes(container) {
   return { days, timeRanges };
 }
 
-function normalizePartySizes(value) {
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map(Number)
-    .filter((value) => !Number.isNaN(value));
+let addFormChipInput;
+
+class ChipInput {
+  constructor(container) {
+    this.container = container;
+    this._values = [];
+    this._render();
+  }
+
+  setValues(values) {
+    this._values = (values || []).filter((v) => Number.isInteger(v) && v >= 1 && v <= 20);
+    this._render();
+  }
+
+  getValues() {
+    return [...this._values];
+  }
+
+  _ordinal(i) {
+    return (["1st", "2nd", "3rd"][i]) ?? `${i + 1}th`;
+  }
+
+  _render() {
+    this.container.innerHTML = "";
+    this._values.forEach((size, i) => {
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.innerHTML = `
+        <span class="chip-ordinal">${this._ordinal(i)}</span>
+        <span class="chip-value">${size}</span>
+        <button type="button" class="chip-btn chip-up" ${i === 0 ? "disabled" : ""} title="Higher priority">↑</button>
+        <button type="button" class="chip-btn chip-down" ${i === this._values.length - 1 ? "disabled" : ""} title="Lower priority">↓</button>
+        <button type="button" class="chip-btn chip-remove" title="Remove">×</button>
+      `;
+      chip.querySelector(".chip-up").addEventListener("click", () => {
+        if (i > 0) {
+          [this._values[i - 1], this._values[i]] = [this._values[i], this._values[i - 1]];
+          this._render();
+        }
+      });
+      chip.querySelector(".chip-down").addEventListener("click", () => {
+        if (i < this._values.length - 1) {
+          [this._values[i], this._values[i + 1]] = [this._values[i + 1], this._values[i]];
+          this._render();
+        }
+      });
+      chip.querySelector(".chip-remove").addEventListener("click", () => {
+        this._values.splice(i, 1);
+        this._render();
+      });
+      this.container.appendChild(chip);
+    });
+
+    const inputWrap = document.createElement("div");
+    inputWrap.className = "chip-input-wrap";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.max = "20";
+    input.placeholder = this._values.length === 0 ? "Add size (e.g. 4)…" : "Add another…";
+    input.className = "chip-text-input";
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === ",") {
+        e.preventDefault();
+        this._addFromInput(input);
+      }
+    });
+    input.addEventListener("blur", () => {
+      if (input.value.trim()) this._addFromInput(input);
+    });
+    inputWrap.appendChild(input);
+    this.container.appendChild(inputWrap);
+  }
+
+  _addFromInput(input) {
+    const val = parseInt(input.value.trim(), 10);
+    input.value = "";
+    if (!isNaN(val) && val >= 1 && val <= 20 && !this._values.includes(val)) {
+      this._values.push(val);
+      this._render();
+      this.container.querySelector(".chip-text-input")?.focus();
+    }
+  }
 }
 
 async function apiFetch(url, options = {}) {
@@ -136,7 +212,7 @@ function renderRestaurantCard(restaurant) {
     </div>
     <div class="form-group">
       <label>Party sizes</label>
-      <input class="edit-party-sizes" value="${restaurant.party_sizes.join(", ")}" />
+      <div class="edit-party-chips chip-input-container"></div>
     </div>
     <div class="form-group">
       <label>Days and Time Ranges</label>
@@ -154,6 +230,8 @@ function renderRestaurantCard(restaurant) {
 
   const editDaysTime = editPanel.querySelector(".edit-days-time");
   buildDaysTimeGrid(editDaysTime, restaurant.days, restaurant.time_ranges);
+  const editChipInput = new ChipInput(editPanel.querySelector(".edit-party-chips"));
+  editChipInput.setValues(restaurant.party_sizes);
 
   header.querySelector(".toggle-btn").addEventListener("click", async () => {
     const updated = await apiFetch(`/api/restaurants/${restaurant.id}`, {
@@ -199,7 +277,7 @@ function renderRestaurantCard(restaurant) {
     const { days, timeRanges } = getSelectedDaysAndTimes(editDaysTime);
     const payload = {
       name: editPanel.querySelector(".edit-name").value.trim(),
-      party_sizes: normalizePartySizes(editPanel.querySelector(".edit-party-sizes").value),
+      party_sizes: editChipInput.getValues(),
       days: days,
       time_ranges: timeRanges,
       enabled: restaurant.enabled,
@@ -330,7 +408,7 @@ async function submitRestaurantForm(event) {
     source: elements.restaurantSource.value,
     resy_venue_id: elements.restaurantSource.value === "resy" ? elements.resyId.value.trim() : null,
     opentable_rid: elements.restaurantSource.value === "opentable" ? elements.opentableId.value.trim() : null,
-    party_sizes: normalizePartySizes(elements.partySizes.value),
+    party_sizes: addFormChipInput.getValues(),
     days: days,
     time_ranges: timeRanges,
     enabled: true,
@@ -360,6 +438,7 @@ async function submitRestaurantForm(event) {
 
   showMessage(elements.resolveResult, "Restaurant added successfully.", "success");
   elements.restaurantForm.reset();
+  addFormChipInput.setValues([]);
   buildDaysTimeGrid(elements.daysTimeGrid);
   handleSourceChange();
   loadRestaurants();
@@ -403,6 +482,7 @@ async function testNotification() {
 
 async function initialize() {
   buildDaysTimeGrid(elements.daysTimeGrid);
+  addFormChipInput = new ChipInput(elements.partySizesChips);
   handleSourceChange();
   loadRestaurants();
   loadLogs();

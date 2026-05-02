@@ -28,6 +28,14 @@ app = Flask(
 scheduler_thread = start_background_scheduler()
 
 
+def _validate_party_sizes(sizes) -> bool:
+    return (
+        isinstance(sizes, list)
+        and len(sizes) > 0
+        and all(isinstance(s, int) and 1 <= s <= 20 for s in sizes)
+    )
+
+
 def _load_env() -> dict:
     env_values = {}
     if ENV_PATH.exists():
@@ -68,6 +76,9 @@ def create_restaurant():
     if not all(field in payload for field in required):
         return jsonify({"error": "Missing required restaurant fields."}), 400
 
+    if not _validate_party_sizes(payload.get("party_sizes")):
+        return jsonify({"error": "party_sizes must be a non-empty list of integers between 1 and 20."}), 400
+
     restaurant = {
         "name": payload["name"].strip(),
         "source": payload["source"].strip().lower(),
@@ -91,6 +102,9 @@ def update_restaurant(restaurant_id: int):
     restaurant = db.get_restaurant(restaurant_id)
     if not restaurant:
         return jsonify({"error": "Restaurant not found."}), 404
+
+    if "party_sizes" in payload and not _validate_party_sizes(payload["party_sizes"]):
+        return jsonify({"error": "party_sizes must be a non-empty list of integers between 1 and 20."}), 400
 
     restaurant.update(
         {

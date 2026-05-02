@@ -85,6 +85,15 @@ Key architectural decisions:
 - Availability count badge on watchlist cards
 - *Design note: consult a design-focused tool for layout/visual decisions before building*
 
+### Stage 8 — Multi-Party-Size Support ✅
+- `party_sizes TEXT` column already existed in the DB schema (JSON array, e.g. `"[4, 2]"`); backward compat via `_row_to_restaurant` fallback was already in place
+- `app/notifier.py` — Added `notified_this_run: set` (scoped per `check_restaurant()` call) to deduplicate across sizes: if a slot's `(date, time)` fires for size 4, size 2 skips it with a "larger party already notified" debug log. Email batch now uses `actually_notified` instead of all `new_slots`.
+- `app/app.py` — Added `_validate_party_sizes()` helper; both POST and PUT endpoints return 400 if `party_sizes` is empty, non-list, or contains values outside 1–20
+- `notifiers/base.py` — Notification body updated to "Table for N" (was "N guests")
+- `static/app.js` — Replaced `normalizePartySizes` text-input approach with a `ChipInput` class; chips show ordinal labels (1st/2nd/3rd), up/down reorder buttons disabled at boundaries, × remove; add form and every card edit panel use the class; form reset calls `setValues([])`
+- `templates/index.html` — Party sizes text input replaced with `<div id="party-sizes-chips" class="chip-input-container">`
+- `static/style.css` — Added chip styles (`.chip-input-container`, `.chip`, `.chip-ordinal`, `.chip-value`, `.chip-btn`, `.chip-input-wrap`, `.chip-text-input`)
+
 ---
 
 ## Completed This Session
@@ -100,6 +109,12 @@ Key architectural decisions:
 
 ### Activity log pruning (Priority 4)
 - Added a `DELETE … NOT IN … LIMIT 500` prune query inside `add_activity_log()` in `app/db.py`; table is capped at 500 rows on every insert
+
+### Multi-party-size support (Stage 8)
+- Cross-size deduplication in `app/notifier.py`: `notified_this_run` set prevents a slot at the same date+time from firing notifications for both a larger and smaller party size in the same check run
+- API validation in `app/app.py`: `party_sizes` must be a non-empty list of integers 1–20; enforced on both create and update
+- Notification body updated to "Table for N" in `notifiers/base.py`
+- Chip-style party size input in dashboard: `ChipInput` class in `app.js` replaces the old comma-separated text field; chips are orderable via ↑/↓ buttons and removable with ×; ordinal hint labels (1st/2nd/3rd) shown on each chip; works in both the Add Restaurant form and every card edit panel
 
 ---
 

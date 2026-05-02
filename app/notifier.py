@@ -40,6 +40,10 @@ def check_restaurant(restaurant: dict) -> None:
     email_enabled = os.getenv("NOTIFY_VIA_EMAIL", "true").lower() == "true"
     notifier = get_notifier()
 
+    # Tracks (date, time) combos already notified this run so a lower-priority
+    # party size doesn't duplicate a notification for the same slot.
+    notified_this_run: set = set()
+
     for party_size in party_sizes:
         for day in days:
             date = get_date_for_day(day)
@@ -88,7 +92,16 @@ def check_restaurant(restaurant: dict) -> None:
                     "debug",
                 )
 
+            actually_notified = []
             for slot in new_slots:
+                if (date, slot.time) in notified_this_run:
+                    db.add_activity_log(
+                        f"🔁 Slot found · skipped (larger party already notified) — {restaurant['name']} {day} {slot.time}",
+                        "debug",
+                    )
+                    continue
+
+                notified_this_run.add((date, slot.time))
                 db.add_notified_slot(venue_id, date, slot.time, party_size)
 
                 slot_dict = {"date": date, "time": slot.time, "party_size": party_size}
@@ -99,7 +112,7 @@ def check_restaurant(restaurant: dict) -> None:
 
                 if push_ok:
                     db.add_activity_log(
-                        f"✅ Slot found · notification sent — {restaurant['name']}: {date} {slot.time}, {party_size} guest(s)",
+                        f"✅ Slot found · notification sent — {restaurant['name']}: {date} {slot.time}, Table for {party_size}",
                         "info",
                         highlight=True,
                         url=booking_url,
@@ -112,17 +125,18 @@ def check_restaurant(restaurant: dict) -> None:
                     )
                 else:
                     db.add_activity_log(
-                        f"✅ Slot found — {restaurant['name']}: {date} {slot.time}, {party_size} guest(s)",
+                        f"✅ Slot found — {restaurant['name']}: {date} {slot.time}, Table for {party_size}",
                         "info",
                         highlight=True,
                         url=booking_url,
                     )
+                actually_notified.append(slot)
 
-            if email_enabled and new_slots:
+            if email_enabled and actually_notified:
                 restaurant_for_email = {**restaurant, "party_size": party_size}
-                if not send_email_notification(restaurant_for_email, new_slots):
+                if not send_email_notification(restaurant_for_email, actually_notified):
                     db.add_activity_log(
-                        f"❌ Notification failed · email — {restaurant['name']} ({len(new_slots)} slot(s))",
+                        f"❌ Notification failed · email — {restaurant['name']} ({len(actually_notified)} slot(s))",
                         "error",
                     )
 

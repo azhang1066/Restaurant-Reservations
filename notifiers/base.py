@@ -26,8 +26,7 @@ def format_slot_body(slot: dict) -> str:
     except (ValueError, TypeError):
         formatted_time = time_str
 
-    guests = "1 guest" if party_size == 1 else f"{party_size} guests"
-    return f"{formatted_date} · {formatted_time} · {guests} — tap to book"
+    return f"{formatted_date} · {formatted_time} · Table for {party_size} — tap to book"
 
 
 class BaseNotifier(ABC):
