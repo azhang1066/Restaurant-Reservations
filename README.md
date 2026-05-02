@@ -119,6 +119,30 @@ python main.py --test
 tail -f notifier.log
 ```
 
+## Venue ID Lookup Utility
+
+Use the `lookup_venue.py` script to easily find Resy and OpenTable venue IDs:
+
+```bash
+# Search Resy by restaurant name and city
+python lookup_venue.py "Carbone" "New York" --resy
+
+# Search both platforms
+python lookup_venue.py "Nobu" "Los Angeles" --both
+
+# Parse venue ID directly from Resy URL
+python lookup_venue.py --resy-url "https://resy.com/venues/carbone/12345"
+
+# Parse restaurant ID from OpenTable URL
+python lookup_venue.py --opentable-url "https://opentable.com/r/carbone/r12345"
+```
+
+The utility supports:
+- **Name + City Search**: Finds venues by restaurant name and location
+- **URL Parsing**: Extracts IDs directly from Resy/OpenTable URLs
+- **Multi-Platform**: Search both Resy and OpenTable simultaneously
+- **Detailed Results**: Shows venue names, neighborhoods, cuisines, and direct booking URLs
+
 ## Restaurant Configuration
 
 Edit `restaurants.py` to add restaurants you want to monitor:
@@ -158,7 +182,21 @@ RESTAURANTS = [
 | `days` | Yes | Days to check (full names) | ["Friday", "Saturday"] |
 | `time_range` | No | Time window in 24h format | ("18:00", "22:00") |
 
-### Finding Resy Venue IDs
+### Finding Restaurant IDs
+
+**Easy Method**: Use the `lookup_venue.py` utility script:
+
+```bash
+# For Resy restaurants
+python lookup_venue.py "Carbone" "New York" --resy
+
+# For OpenTable restaurants (use URL parsing)
+python lookup_venue.py --opentable-url "https://opentable.com/r/carbone/r12345"
+```
+
+**Manual Methods** (if you prefer):
+
+#### Finding Resy Venue IDs
 
 **Method 1: From URL**
 1. Go to the restaurant's Resy page
@@ -172,7 +210,7 @@ RESTAURANTS = [
 4. Look for requests to `api.resy.com`
 5. In the response JSON, find the `id` field
 
-### Finding OpenTable Restaurant IDs
+#### Finding OpenTable Restaurant IDs
 
 **Method 1: From URL**
 1. Go to OpenTable, find the restaurant
