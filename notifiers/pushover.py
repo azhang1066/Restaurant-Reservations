@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class PushoverNotifier(BaseNotifier):
-    def send(self, restaurant_name: str, slot: dict, booking_url: str) -> bool:
+    def send(self, restaurant_name: str, slot: dict, urls: dict) -> bool:
         user_key = os.getenv("PUSHOVER_USER_KEY", "").strip()
         app_token = os.getenv("PUSHOVER_APP_TOKEN", "").strip()
 
@@ -17,20 +17,24 @@ class PushoverNotifier(BaseNotifier):
             logger.warning("Pushover credentials not configured (PUSHOVER_USER_KEY / PUSHOVER_APP_TOKEN)")
             return False
 
+        web_url = urls.get("web_url", "")
         body = format_slot_body(slot)
+
+        data = {
+            "token": app_token,
+            "user": user_key,
+            "title": restaurant_name,
+            "message": body,
+            "priority": 1,
+        }
+        if web_url:
+            data["url"] = web_url
+            data["url_title"] = "Book Now"
 
         try:
             response = httpx.post(
                 "https://api.pushover.net/1/messages.json",
-                data={
-                    "token": app_token,
-                    "user": user_key,
-                    "title": restaurant_name,
-                    "message": body,
-                    "priority": 1,
-                    "url": booking_url,
-                    "url_title": "Book now",
-                },
+                data=data,
                 timeout=10,
             )
             if response.status_code == 200:

@@ -112,6 +112,7 @@ function renderRestaurantCard(restaurant) {
       <button class="button button-secondary toggle-btn">${restaurant.enabled ? "On" : "Off"}</button>
       <button class="button button-secondary delete-btn">Delete</button>
       <button class="button button-secondary edit-btn">Edit</button>
+      <button class="button button-secondary deep-link-btn" title="Generate a booking link for today">Test link</button>
     </div>
   `;
 
@@ -172,6 +173,24 @@ function renderRestaurantCard(restaurant) {
     editPanel.classList.toggle("hidden");
   });
 
+  header.querySelector(".deep-link-btn").addEventListener("click", async () => {
+    const btn = header.querySelector(".deep-link-btn");
+    btn.disabled = true;
+    btn.textContent = "…";
+    const today = new Date().toISOString().slice(0, 10);
+    const defaultSize = restaurant.party_sizes[0] || 2;
+    const data = await apiFetch(
+      `/api/restaurants/${restaurant.id}/deep-link?date=${today}&time=19:00&party_size=${defaultSize}`
+    );
+    btn.disabled = false;
+    btn.textContent = "Test link";
+    if (data.web_url) {
+      window.open(data.web_url, "_blank", "noopener,noreferrer");
+    } else {
+      alert("Could not generate a deep link for this restaurant.");
+    }
+  });
+
   editPanel.querySelector(".cancel-btn").addEventListener("click", () => {
     editPanel.classList.add("hidden");
   });
@@ -210,10 +229,26 @@ async function loadLogs() {
   logs.forEach((log) => {
     const item = document.createElement("div");
     item.className = `log-item ${log.highlight ? "highlight" : ""} level-${log.level}`;
-    item.innerHTML = `
-      <time>${new Date(log.timestamp + "Z").toLocaleString()}</time>
-      <p>${log.message}</p>
-    `;
+
+    const timeEl = document.createElement("time");
+    timeEl.textContent = new Date(log.timestamp + "Z").toLocaleString();
+
+    const msgEl = document.createElement("p");
+    msgEl.textContent = log.message;
+
+    item.appendChild(timeEl);
+    item.appendChild(msgEl);
+
+    if (log.url) {
+      const link = document.createElement("a");
+      link.href = log.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.className = "book-now-link";
+      link.textContent = "Book Now →";
+      item.appendChild(link);
+    }
+
     elements.activityLog.appendChild(item);
   });
 }

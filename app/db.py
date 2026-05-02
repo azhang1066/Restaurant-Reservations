@@ -55,6 +55,12 @@ def init_db() -> sqlite3.Connection:
             )
             """
         )
+        # Add url column to activity_log for deep link storage
+        try:
+            conn.execute("ALTER TABLE activity_log ADD COLUMN url TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS notified_slots (
@@ -197,20 +203,25 @@ def delete_restaurant(restaurant_id: int) -> bool:
     return cursor.rowcount > 0
 
 
-def add_activity_log(message: str, level: str = "info", highlight: bool = False) -> None:
+def add_activity_log(
+    message: str,
+    level: str = "info",
+    highlight: bool = False,
+    url: Optional[str] = None,
+) -> None:
     conn = init_db()
     now = datetime.utcnow().isoformat()
     with conn:
         conn.execute(
-            "INSERT INTO activity_log (timestamp, level, message, highlight) VALUES (?, ?, ?, ?)",
-            (now, level, message, int(highlight)),
+            "INSERT INTO activity_log (timestamp, level, message, highlight, url) VALUES (?, ?, ?, ?, ?)",
+            (now, level, message, int(highlight), url),
         )
 
 
 def get_recent_logs(limit: int = 50) -> List[Dict[str, Any]]:
     conn = init_db()
     cursor = conn.execute(
-        "SELECT timestamp, level, message, highlight FROM activity_log ORDER BY id DESC LIMIT ?",
+        "SELECT timestamp, level, message, highlight, url FROM activity_log ORDER BY id DESC LIMIT ?",
         (limit,),
     )
     return [dict(row) for row in cursor.fetchall()][::-1]

@@ -14,6 +14,7 @@ Automated Python application to monitor Resy and OpenTable for restaurant availa
 - Email notifications (SMTP)
 - Per-channel on/off toggles
 - Smart deduplication — re-notifies only if a slot disappeared and came back
+- **Deep link booking** — notifications tap straight into the pre-filled booking flow
 
 ⏰ **Smart Scheduling**
 - Background monitoring on configurable intervals
@@ -31,6 +32,7 @@ Automated Python application to monitor Resy and OpenTable for restaurant availa
 The application is built with a modular design:
 
 - **`main.py`** - Main scheduler and notification engine
+- **`deep_links.py`** - Booking URL builder with HEAD validation and CLI
 - **`resy_api.py`** - Clean API client for Resy and OpenTable
 - **`restaurants.py`** - Restaurant configuration and constants
 - **`.env.example`** - Environment variable template
@@ -184,6 +186,44 @@ The dashboard includes:
 - enable/disable and delete controls
 - live activity log with availability events
 - SMTP and Pushover notification configuration
+
+## Deep Link Booking URLs
+
+When a matching slot is found, the push notification and the activity log both include a pre-filled booking URL that drops you directly into the reservation flow — no manual date/time/party-size selection required.
+
+### How it works
+
+1. The notifier calls `deep_links.build_booking_url(platform, venue, slot)` for every new slot.
+2. A lightweight HEAD request (2 s timeout) validates the URL resolves correctly. If validation fails or times out, it falls back to the restaurant's homepage so the notification is never delayed.
+3. The validated URL is used as the `Click` target in ntfy, the `url` field in Pushover, and stored in the activity log so you can also click **Book Now →** directly from the dashboard.
+
+### URL formats (as-inspected)
+
+| Platform | Deep link format |
+|---|---|
+| Resy | `resy.com/venues/{slug}/{venue_id}?date=YYYY-MM-DD&seats=N` |
+| OpenTable | `opentable.com/r/{rid}?covers=N&dateTime=YYYY-MM-DDTHH:MM` |
+
+Resy pre-fills **date and party size** (no time parameter in the web URL — the slot grid opens to the right date).  
+OpenTable pre-fills **date, time, and party size** via the `dateTime` parameter.
+
+### Native app deep links
+
+Neither Resy nor OpenTable publicly documents a `resy://` or `opentable://` URL scheme, so `app_url` is the same as `web_url` for both platforms. If a native scheme is ever confirmed, set it in `deep_links.py` and the ntfy notifier will automatically add an "Open App" action button.
+
+### If URLs break after a platform update
+
+Platforms occasionally restructure their URLs. If the HEAD validation starts returning fallback URLs for all slots, check `deep_links.py` and update `_resy_candidate()` or `_opentable_candidate()` to match the new format. Use the CLI to test without running the full scheduler:
+
+```bash
+python deep_links.py --platform resy --venue-id 12345 --venue-name "Carbone" \
+    --date 2026-05-09 --time 20:00 --party-size 2
+
+python deep_links.py --platform opentable --venue-id 67890 --venue-name "Nobu" \
+    --date 2026-05-09 --time 19:30 --party-size 4 --no-validate
+```
+
+You can also click **Test link** on any restaurant card in the dashboard to open a sample booking URL for today in your browser.
 
 ## Venue ID Lookup Utility
 

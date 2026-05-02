@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 import restaurants as restaurant_config
 from app import db
+from deep_links import build_booking_url
 from main import (
     check_opentable_availability,
     check_resy_availability,
@@ -20,12 +21,6 @@ from notifiers import get_notifier
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-
-
-def _booking_url(source: str, venue_id: str, date: str, party_size: int, slot_time: str) -> str:
-    if source == "opentable":
-        return f"https://www.opentable.com/r/{venue_id}?covers={party_size}&dateTime={date}T{slot_time}:00"
-    return f"https://resy.com/venues/{venue_id}?date={date}&seats={party_size}"
 
 
 def check_restaurant(restaurant: dict) -> None:
@@ -69,7 +64,6 @@ def check_restaurant(restaurant: dict) -> None:
             if time_range:
                 slots = filter_slots_by_time(slots, time_range)
 
-            # Times currently available — used to evict stale notified entries
             current_times = {slot.time for slot in slots}
             db.remove_stale_notified_slots(venue_id, date, party_size, current_times)
 
@@ -96,30 +90,34 @@ def check_restaurant(restaurant: dict) -> None:
 
             for slot in new_slots:
                 db.add_notified_slot(venue_id, date, slot.time, party_size)
-                booking_url = _booking_url(source, venue_id, date, party_size, slot.time)
-                slot_dict = {"date": date, "time": slot.time, "party_size": party_size}
 
-                push_ok = push_enabled and notifier.send(restaurant["name"], slot_dict, booking_url)
+                slot_dict = {"date": date, "time": slot.time, "party_size": party_size}
+                urls = build_booking_url(source, restaurant, slot_dict)
+                booking_url = urls["web_url"]
+
+                push_ok = push_enabled and notifier.send(restaurant["name"], slot_dict, urls)
 
                 if push_ok:
                     db.add_activity_log(
                         f"✅ Slot found · notification sent — {restaurant['name']}: {date} {slot.time}, {party_size} guest(s)",
                         "info",
                         highlight=True,
+                        url=booking_url,
                     )
                 elif push_enabled:
                     db.add_activity_log(
                         f"❌ Notification failed · push — {restaurant['name']}: {date} {slot.time}",
                         "error",
+                        url=booking_url,
                     )
                 else:
                     db.add_activity_log(
                         f"✅ Slot found — {restaurant['name']}: {date} {slot.time}, {party_size} guest(s)",
                         "info",
                         highlight=True,
+                        url=booking_url,
                     )
 
-            # Batch email for all newly found slots
             if email_enabled and new_slots:
                 restaurant_for_email = {**restaurant, "party_size": party_size}
                 if not send_email_notification(restaurant_for_email, new_slots):

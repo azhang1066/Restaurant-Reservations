@@ -10,6 +10,7 @@ from flask import Flask, jsonify, render_template, request
 
 from . import db
 from .notifier import start_background_scheduler
+from deep_links import build_booking_url
 from lookup_venue import parse_opentable_url, parse_resy_url
 from notifiers import get_notifier
 
@@ -213,12 +214,32 @@ def test_notification():
         "time": "19:30",
         "party_size": 2,
     }
-    success = notifier.send("Test Restaurant", test_slot, "https://resy.com")
+    # Use a known-good Resy homepage as the test click target
+    test_urls = {"web_url": "https://resy.com", "app_url": "https://resy.com", "fallback_url": "https://resy.com"}
+    success = notifier.send("Test Restaurant", test_slot, test_urls)
     if success:
         db.add_activity_log(f"Test notification sent via {provider}", "info")
         return jsonify({"success": True, "message": f"Test notification sent via {provider}!"})
     db.add_activity_log(f"Test notification failed via {provider}", "error")
     return jsonify({"success": False, "message": f"Failed — check {provider.upper()} config."}), 400
+
+
+@app.route("/api/restaurants/<int:restaurant_id>/deep-link", methods=["GET"])
+def restaurant_deep_link(restaurant_id: int):
+    restaurant = db.get_restaurant(restaurant_id)
+    if not restaurant:
+        return jsonify({"error": "Restaurant not found."}), 404
+
+    date = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
+    time_str = request.args.get("time", "19:00")
+    try:
+        party_size = int(request.args.get("party_size", restaurant.get("party_sizes", [2])[0]))
+    except (ValueError, IndexError):
+        party_size = 2
+
+    slot = {"date": date, "time": time_str, "party_size": party_size}
+    urls = build_booking_url(restaurant["source"], restaurant, slot)
+    return jsonify(urls)
 
 
 if __name__ == "__main__":
