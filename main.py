@@ -5,7 +5,6 @@ Monitors Resy and OpenTable for available reservations and sends notifications.
 """
 
 import argparse
-import json
 import logging
 import os
 import smtplib
@@ -13,7 +12,6 @@ import sys
 from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from pathlib import Path
 from typing import Optional
 
 import requests
@@ -21,6 +19,7 @@ import schedule
 from dotenv import load_dotenv
 
 import restaurants
+from app import db
 from resy_api import create_resy_client, create_opentable_client, TimeSlot
 
 # Load environment variables
@@ -37,34 +36,6 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
-
-# File to track seen slots
-SEEN_SLOTS_FILE = "seen_slots.json"
-
-
-def load_seen_slots() -> set:
-    """Load previously seen slots from file."""
-    if Path(SEEN_SLOTS_FILE).exists():
-        try:
-            with open(SEEN_SLOTS_FILE, "r") as f:
-                return set(json.load(f))
-        except (json.JSONDecodeError, IOError):
-            return set()
-    return set()
-
-
-def save_seen_slots(slots: set) -> None:
-    """Save seen slots to file."""
-    try:
-        with open(SEEN_SLOTS_FILE, "w") as f:
-            json.dump(list(slots), f)
-    except IOError as e:
-        logger.warning(f"Could not save seen slots: {e}")
-
-
-def get_seen_slot_key(venue_id: str, date: str, time: str, party_size: int) -> str:
-    """Generate a unique key for a slot."""
-    return f"{venue_id}:{date}:{time}:{party_size}"
 
 
 def get_resy_headers() -> dict:
@@ -268,60 +239,54 @@ def send_notification(restaurant: dict, slots: list[TimeSlot]) -> None:
         logger.warning(f"No notifications sent for {restaurant['name']}")
 
 
-def check_restaurant(restaurant: dict, seen_slots: set) -> list[TimeSlot]:
+def check_restaurant(restaurant: dict) -> list[TimeSlot]:
     """Check a single restaurant for availability."""
     source = restaurant.get("source", "resy").lower()
     party_size = restaurant.get("party_size", 2)
     days = restaurant.get("days", [])
     time_range = restaurant.get("time_range")
-    
-    # Get the appropriate venue ID based on source
+
     if source == "opentable":
         venue_id = restaurant.get("opentable_rid")
     else:
         venue_id = restaurant.get("resy_venue_id")
-    
+
     if not venue_id:
         logger.warning(f"Missing venue_id for {restaurant.get('name', 'Unknown')}")
         return []
-    
+
     all_available_slots = []
-    
+
     for day in days:
         date = get_date_for_day(day)
         if not date:
             continue
-        
+
         logger.info(f"Checking {restaurant['name']} ({source}) for {day} ({date})")
-        
-        # Check availability based on source
+
         if source == "opentable":
             slots = check_opentable_availability(venue_id, party_size, date)
         else:
             slots = check_resy_availability(venue_id, party_size, date)
-        
+
         if time_range:
             slots = filter_slots_by_time(slots, time_range)
-        
-        # Filter out already-seen slots
+
+        current_times = {slot.time for slot in slots}
+        db.remove_stale_notified_slots(venue_id, date, party_size, current_times)
+
         new_slots = []
         for slot in slots:
-            slot_key = get_seen_slot_key(
-                venue_id,
-                date,
-                slot.datetime,
-                party_size,
-            )
-            if slot_key not in seen_slots:
+            if not db.has_notified_slot(venue_id, date, slot.time, party_size):
                 new_slots.append(slot)
-                seen_slots.add(slot_key)
-        
+                db.add_notified_slot(venue_id, date, slot.time, party_size)
+
         if new_slots:
             logger.info(f"Found {len(new_slots)} new slot(s) at {restaurant['name']} for {day}")
             all_available_slots.extend(new_slots)
         else:
             logger.debug(f"No new slots found at {restaurant['name']} for {day}")
-    
+
     return all_available_slots
 
 
@@ -329,16 +294,15 @@ def run_check() -> None:
     """Run a single check for all restaurants."""
     logger.info("=" * 50)
     logger.info("Starting availability check")
-    
-    seen_slots = load_seen_slots()
-    
+
+    db.init_db()
+
     for restaurant in restaurants.RESTAURANTS:
-        slots = check_restaurant(restaurant, seen_slots)
-        
+        slots = check_restaurant(restaurant)
+
         if slots:
             send_notification(restaurant, slots)
-    
-    save_seen_slots(seen_slots)
+
     logger.info("Availability check complete")
     logger.info("=" * 50)
 

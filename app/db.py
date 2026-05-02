@@ -216,6 +216,9 @@ def add_activity_log(
             "INSERT INTO activity_log (timestamp, level, message, highlight, url) VALUES (?, ?, ?, ?, ?)",
             (now, level, message, int(highlight), url),
         )
+        conn.execute(
+            "DELETE FROM activity_log WHERE id NOT IN (SELECT id FROM activity_log ORDER BY id DESC LIMIT 500)"
+        )
 
 
 def get_recent_logs(limit: int = 50) -> List[Dict[str, Any]]:

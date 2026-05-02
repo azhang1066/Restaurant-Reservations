@@ -55,7 +55,7 @@ Key architectural decisions:
 - `notified_slots` SQLite table: `(venue_id, date, time, party_size)` composite PK
 - `has_notified_slot()`, `add_notified_slot()`, `remove_stale_notified_slots()` in `db.py`
 - Stale removal: slots no longer in the API response are evicted → re-notified if they return
-- Replaced `seen_slots.json` file tracking; file still exists on disk but is no longer written to
+- Replaced `seen_slots.json` file tracking and deleted the file; CLI `main.py` path now uses the same SQLite table as the Flask scheduler
 - Log states: ✅ sent · 🔁 skipped · 🔍 nothing found · ❌ failed
 
 ### Stage 5 — Deep Link Booking URLs ✅
@@ -75,12 +75,12 @@ Key architectural decisions:
 - Verify Resy deep link format resolves correctly (the slug-based URL is reverse-engineered)
 - Consider storing `resy_url` or `resy_slug` in the restaurant record if HEAD validation falls back too often
 - Add unit tests for `deep_links.py` and `notifiers/`
-- Prune old `seen_slots.json` reference / delete the file
+- ~~Prune old `seen_slots.json` reference / delete the file~~ ✅
 - Fix dashboard status pill (currently stuck on "Loading…")
 
 ### Stage 7 — Dashboard UX Polish 🔲
 - "Check Now" button to trigger an immediate availability run from the UI
-- Log auto-pruning (keep last 500 entries; currently grows indefinitely)
+- ~~Log auto-pruning (keep last 500 entries)~~ ✅
 - Scheduler status indicator (last check time, next check time)
 - Availability count badge on watchlist cards
 - *Design note: consult a design-focused tool for layout/visual decisions before building*
@@ -88,6 +88,22 @@ Key architectural decisions:
 ---
 
 ## Completed This Session
+
+**Session date:** 2026-05-02
+
+### CLI deduplication cleanup (Priority 2)
+- Replaced `load_seen_slots`/`save_seen_slots`/`get_seen_slot_key` in `main.py` with `db.has_notified_slot()`, `db.add_notified_slot()`, `db.remove_stale_notified_slots()`
+- Removed `import json`, `SEEN_SLOTS_FILE` constant, and the three file-based helpers from `main.py`
+- `check_restaurant()` signature simplified (no `seen_slots` param); `run_check()` calls `db.init_db()` on startup
+- CLI and Flask scheduler now share the same `notified_slots` SQLite table
+- Deleted `seen_slots.json` from the repo
+
+### Activity log pruning (Priority 4)
+- Added a `DELETE … NOT IN … LIMIT 500` prune query inside `add_activity_log()` in `app/db.py`; table is capped at 500 rows on every insert
+
+---
+
+## Previous Session
 
 **Session date:** 2026-05-01
 
@@ -129,15 +145,7 @@ The Resy URL `resy.com/venues/{slug}/{venue_id}?date=...&seats=...` is reverse-e
    - Option B: Use `resy.com/cities/{city}/venues/{slug}` format (requires storing city too)
 4. Update `deep_links._resy_candidate()` with the confirmed format
 
-### Priority 2 — Clean up `seen_slots.json`
-`seen_slots.json` still exists on disk and `main.py` still reads/writes it for the standalone CLI path. The `app/notifier.py` scheduler no longer uses it.
-
-**Steps:**
-1. In `main.py`'s `check_restaurant()` function, replace the `seen_slots` set approach with `db.has_notified_slot()` / `db.add_notified_slot()` (same pattern as `app/notifier.py`)
-2. Remove calls to `load_seen_slots()` / `save_seen_slots()` from `main.py`'s `run_check()`
-3. Delete `seen_slots.json` from the repo
-
-### Priority 3 — Fix dashboard status pill
+### Priority 2 — Fix dashboard status pill
 The header shows "Loading…" forever. Wire it to scheduler state.
 
 **Steps:**
@@ -145,15 +153,7 @@ The header shows "Loading…" forever. Wire it to scheduler state.
 2. Track `last_check_time` as a module-level variable in `app/notifier.py`, updated at the end of each `run_check()`
 3. In `static/app.js`, call `/api/status` on load and every 30 s; update the `#status-pill` text to show "Last check: 2 min ago"
 
-### Priority 4 — Add log pruning
-The `activity_log` table grows without bound.
-
-**Steps:**
-1. In `app/db.py`, after each `add_activity_log()` insert, run:
-   `DELETE FROM activity_log WHERE id NOT IN (SELECT id FROM activity_log ORDER BY id DESC LIMIT 500)`
-2. Or add a scheduled nightly prune job in `app/notifier.py`
-
-### Priority 5 — "Check Now" button
+### Priority 3 — "Check Now" button
 Allow triggering an immediate availability check from the dashboard without waiting for the scheduler interval.
 
 **Steps:**
