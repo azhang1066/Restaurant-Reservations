@@ -1,5 +1,8 @@
 import json
 import os
+import random
+import string
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -8,6 +11,7 @@ from flask import Flask, jsonify, render_template, request
 from . import db
 from .notifier import start_background_scheduler
 from lookup_venue import parse_opentable_url, parse_resy_url
+from notifiers import get_notifier
 
 load_dotenv()
 
@@ -165,6 +169,13 @@ def list_logs():
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
     env = _load_env()
+
+    # Auto-generate a random ntfy topic on first load so the user has one ready
+    if not env.get("NTFY_TOPIC"):
+        suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        env["NTFY_TOPIC"] = f"resy-notifier-{suffix}"
+        _save_env({"NTFY_TOPIC": env["NTFY_TOPIC"]})
+
     keys = [
         "SMTP_HOST",
         "SMTP_PORT",
@@ -174,6 +185,12 @@ def get_settings():
         "FROM_EMAIL",
         "PUSHOVER_TOKEN",
         "PUSHOVER_USER",
+        "NOTIFY_PROVIDER",
+        "NTFY_TOPIC",
+        "PUSHOVER_USER_KEY",
+        "PUSHOVER_APP_TOKEN",
+        "NOTIFY_VIA_EMAIL",
+        "NOTIFY_VIA_PUSH",
         "RESY_API_KEY",
         "RESY_AUTH_TOKEN",
     ]
@@ -183,11 +200,25 @@ def get_settings():
 @app.route("/api/settings", methods=["POST"])
 def save_settings():
     payload = request.get_json(force=True)
-    settings = {key: payload.get(key, "") for key in _load_env().keys()}
-    if not settings:
-        settings = payload
-    _save_env(settings)
+    _save_env(payload)
     return jsonify({"success": True})
+
+
+@app.route("/api/test-notification", methods=["POST"])
+def test_notification():
+    notifier = get_notifier()
+    provider = os.getenv("NOTIFY_PROVIDER", "ntfy")
+    test_slot = {
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "time": "19:30",
+        "party_size": 2,
+    }
+    success = notifier.send("Test Restaurant", test_slot, "https://resy.com")
+    if success:
+        db.add_activity_log(f"Test notification sent via {provider}", "info")
+        return jsonify({"success": True, "message": f"Test notification sent via {provider}!"})
+    db.add_activity_log(f"Test notification failed via {provider}", "error")
+    return jsonify({"success": False, "message": f"Failed — check {provider.upper()} config."}), 400
 
 
 if __name__ == "__main__":

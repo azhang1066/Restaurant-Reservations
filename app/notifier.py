@@ -1,7 +1,7 @@
 import logging
+import os
 import threading
 import time
-from datetime import datetime
 
 import schedule
 from dotenv import load_dotenv
@@ -13,36 +13,37 @@ from main import (
     check_resy_availability,
     filter_slots_by_time,
     get_date_for_day,
-    get_seen_slot_key,
-    load_seen_slots,
-    save_seen_slots,
-    send_notification,
+    send_email_notification,
 )
+from notifiers import get_notifier
 
-# Ensure environment variables are loaded for notifications
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 
-def check_restaurant(restaurant: dict, seen_slots: set) -> list:
+def _booking_url(source: str, venue_id: str, date: str, party_size: int, slot_time: str) -> str:
+    if source == "opentable":
+        return f"https://www.opentable.com/r/{venue_id}?covers={party_size}&dateTime={date}T{slot_time}:00"
+    return f"https://resy.com/venues/{venue_id}?date={date}&seats={party_size}"
+
+
+def check_restaurant(restaurant: dict) -> None:
     source = restaurant.get("source", "resy").lower()
     party_sizes = restaurant.get("party_sizes") or [2]
     days = restaurant.get("days") or []
     time_ranges = restaurant.get("time_ranges") or {}
 
-    if source == "opentable":
-        venue_id = restaurant.get("opentable_rid")
-    else:
-        venue_id = restaurant.get("resy_venue_id")
-
+    venue_id = restaurant.get("opentable_rid") if source == "opentable" else restaurant.get("resy_venue_id")
     if not venue_id:
-        message = f"Missing venue ID for {restaurant.get('name', 'Unknown')}"
-        logger.warning(message)
-        db.add_activity_log(message, "warning")
-        return []
+        msg = f"Missing venue ID for {restaurant.get('name', 'Unknown')}"
+        logger.warning(msg)
+        db.add_activity_log(msg, "warning")
+        return
 
-    all_available_slots = []
+    push_enabled = os.getenv("NOTIFY_VIA_PUSH", "true").lower() == "true"
+    email_enabled = os.getenv("NOTIFY_VIA_EMAIL", "true").lower() == "true"
+    notifier = get_notifier()
 
     for party_size in party_sizes:
         for day in days:
@@ -50,11 +51,11 @@ def check_restaurant(restaurant: dict, seen_slots: set) -> list:
             if not date:
                 continue
 
-            time_range = None
-            if time_ranges.get(day):
-                time_range = tuple(time_ranges[day])
+            time_range = time_ranges.get(day)
+            if time_range:
+                time_range = tuple(time_range)
 
-            logger.info(f"Checking {restaurant['name']} ({source}) for {day} ({date}) party_size={party_size}")
+            logger.info(f"Checking {restaurant['name']} ({source}) for {day} ({date}) size={party_size}")
             db.add_activity_log(
                 f"Checking {restaurant['name']} ({source}) for {day} ({date}) size={party_size}",
                 "debug",
@@ -68,57 +69,86 @@ def check_restaurant(restaurant: dict, seen_slots: set) -> list:
             if time_range:
                 slots = filter_slots_by_time(slots, time_range)
 
-            new_slots = []
-            for slot in slots:
-                slot_key = get_seen_slot_key(venue_id, date, slot.datetime, party_size)
-                if slot_key not in seen_slots:
-                    new_slots.append(slot)
-                    seen_slots.add(slot_key)
+            # Times currently available — used to evict stale notified entries
+            current_times = {slot.time for slot in slots}
+            db.remove_stale_notified_slots(venue_id, date, party_size, current_times)
 
-            if new_slots:
-                logger.info(
-                    f"Found {len(new_slots)} new slot(s) at {restaurant['name']} for {day}"
-                )
+            if not slots:
                 db.add_activity_log(
-                    f"Found {len(new_slots)} new slot(s) at {restaurant['name']} for {day}",
-                    "info",
-                    highlight=True,
+                    f"🔍 Check complete · nothing found — {restaurant['name']} {day} (size={party_size})",
+                    "debug",
                 )
-                all_available_slots.extend(new_slots)
-            else:
-                logger.debug(f"No new slots at {restaurant['name']} for {day}")
+                continue
 
-    return all_available_slots
+            new_slots = []
+            skipped_slots = []
+            for slot in slots:
+                if db.has_notified_slot(venue_id, date, slot.time, party_size):
+                    skipped_slots.append(slot)
+                else:
+                    new_slots.append(slot)
+
+            if skipped_slots:
+                db.add_activity_log(
+                    f"🔁 Slot found · skipped (already notified) — {restaurant['name']} {day}: {len(skipped_slots)} slot(s)",
+                    "debug",
+                )
+
+            for slot in new_slots:
+                db.add_notified_slot(venue_id, date, slot.time, party_size)
+                booking_url = _booking_url(source, venue_id, date, party_size, slot.time)
+                slot_dict = {"date": date, "time": slot.time, "party_size": party_size}
+
+                push_ok = push_enabled and notifier.send(restaurant["name"], slot_dict, booking_url)
+
+                if push_ok:
+                    db.add_activity_log(
+                        f"✅ Slot found · notification sent — {restaurant['name']}: {date} {slot.time}, {party_size} guest(s)",
+                        "info",
+                        highlight=True,
+                    )
+                elif push_enabled:
+                    db.add_activity_log(
+                        f"❌ Notification failed · push — {restaurant['name']}: {date} {slot.time}",
+                        "error",
+                    )
+                else:
+                    db.add_activity_log(
+                        f"✅ Slot found — {restaurant['name']}: {date} {slot.time}, {party_size} guest(s)",
+                        "info",
+                        highlight=True,
+                    )
+
+            # Batch email for all newly found slots
+            if email_enabled and new_slots:
+                restaurant_for_email = {**restaurant, "party_size": party_size}
+                if not send_email_notification(restaurant_for_email, new_slots):
+                    db.add_activity_log(
+                        f"❌ Notification failed · email — {restaurant['name']} ({len(new_slots)} slot(s))",
+                        "error",
+                    )
 
 
 def run_check() -> None:
     logger.info("Starting availability check")
     db.add_activity_log("Starting availability check", "info")
 
-    seen_slots = load_seen_slots()
     restaurants = db.get_restaurants()
 
     if not restaurants:
-        message = "No restaurants configured yet. Add a restaurant in the dashboard."
-        logger.info(message)
-        db.add_activity_log(message, "info")
+        msg = "No restaurants configured yet. Add a restaurant in the dashboard."
+        logger.info(msg)
+        db.add_activity_log(msg, "info")
 
     for restaurant in restaurants:
         if not restaurant.get("enabled", True):
             continue
-
         try:
-            slots = check_restaurant(restaurant, seen_slots)
-            if slots:
-                send_notification(restaurant, slots)
-                db.add_activity_log(
-                    f"Sent notification for {restaurant['name']}", "info", highlight=True
-                )
+            check_restaurant(restaurant)
         except Exception as e:
             logger.error(f"Error checking {restaurant['name']}: {e}")
             db.add_activity_log(f"Error checking {restaurant['name']}: {e}", "error")
 
-    save_seen_slots(seen_slots)
     logger.info("Availability check complete")
     db.add_activity_log("Availability check complete", "info")
 

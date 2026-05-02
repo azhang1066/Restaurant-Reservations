@@ -55,6 +55,18 @@ def init_db() -> sqlite3.Connection:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notified_slots (
+                venue_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                time TEXT NOT NULL,
+                party_size INTEGER NOT NULL,
+                notified_at TEXT NOT NULL,
+                PRIMARY KEY (venue_id, date, time, party_size)
+            )
+            """
+        )
     return conn
 
 
@@ -241,3 +253,41 @@ def ensure_migrated(config_restaurants: List[Dict[str, Any]]) -> None:
             }
         )
     add_activity_log("Migrated restaurant configuration from restaurants.py", "info")
+
+
+def has_notified_slot(venue_id: str, date: str, time: str, party_size: int) -> bool:
+    conn = init_db()
+    row = conn.execute(
+        "SELECT 1 FROM notified_slots WHERE venue_id=? AND date=? AND time=? AND party_size=?",
+        (venue_id, date, time, party_size),
+    ).fetchone()
+    return row is not None
+
+
+def add_notified_slot(venue_id: str, date: str, time: str, party_size: int) -> None:
+    conn = init_db()
+    from datetime import timezone
+    now = datetime.now(timezone.utc).isoformat()
+    with conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO notified_slots (venue_id, date, time, party_size, notified_at) VALUES (?, ?, ?, ?, ?)",
+            (venue_id, date, time, party_size, now),
+        )
+
+
+def remove_stale_notified_slots(
+    venue_id: str, date: str, party_size: int, current_times: set
+) -> None:
+    """Remove notified slots that are no longer available so they re-notify if they reappear."""
+    conn = init_db()
+    rows = conn.execute(
+        "SELECT time FROM notified_slots WHERE venue_id=? AND date=? AND party_size=?",
+        (venue_id, date, party_size),
+    ).fetchall()
+    with conn:
+        for row in rows:
+            if row["time"] not in current_times:
+                conn.execute(
+                    "DELETE FROM notified_slots WHERE venue_id=? AND date=? AND time=? AND party_size=?",
+                    (venue_id, date, row["time"], party_size),
+                )

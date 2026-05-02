@@ -79,46 +79,99 @@
       <section class="panel panel-settings">
         <h2>Notification Settings</h2>
         <form id="settings-form">
-          <div class="form-group">
-            <label for="smtp-host">SMTP Host</label>
-            <input id="smtp-host" type="text" placeholder="smtp.gmail.com" />
+
+          <div class="settings-section">
+            <h3>Push Notifications</h3>
+            <div class="form-group">
+              <label for="notify-provider">Provider</label>
+              <select id="notify-provider">
+                <option value="ntfy">ntfy (free, no account required)</option>
+                <option value="pushover">Pushover</option>
+              </select>
+            </div>
+
+            <div id="ntfy-section">
+              <div class="form-group">
+                <label for="ntfy-topic">Topic</label>
+                <div class="input-with-action">
+                  <input id="ntfy-topic" type="text" placeholder="resy-notifier-xxxxxx" />
+                  <button type="button" id="copy-ntfy-link" class="button button-secondary">Copy link</button>
+                </div>
+                <small>Subscribe to <strong id="ntfy-subscribe-url">ntfy.sh/…</strong> in the ntfy app on your phone.</small>
+              </div>
+            </div>
+
+            <div id="pushover-section" hidden>
+              <div class="form-group">
+                <label for="pushover-user-key">User Key</label>
+                <input id="pushover-user-key" type="text" placeholder="your Pushover user key" />
+              </div>
+              <div class="form-group">
+                <label for="pushover-app-token">App Token</label>
+                <input id="pushover-app-token" type="text" placeholder="your Pushover app token" />
+              </div>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="smtp-port">SMTP Port</label>
-            <input id="smtp-port" type="text" placeholder="587" />
+
+          <div class="settings-section">
+            <h3>Channels</h3>
+            <div class="toggle-row">
+              <label class="toggle-label">
+                <input type="checkbox" id="notify-via-push" />
+                Push notifications
+              </label>
+              <label class="toggle-label">
+                <input type="checkbox" id="notify-via-email" />
+                Email notifications
+              </label>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="smtp-user">SMTP User</label>
-            <input id="smtp-user" type="text" placeholder="username@example.com" />
+
+          <div class="test-notification-row">
+            <button type="button" id="test-notification" class="button button-secondary">Send test notification</button>
+            <div id="test-notification-result" class="message" hidden></div>
           </div>
-          <div class="form-group">
-            <label for="smtp-pass">SMTP Password</label>
-            <input id="smtp-pass" type="password" placeholder="password or app password" />
+
+          <div class="settings-section">
+            <h3>Email (SMTP)</h3>
+            <div class="form-group">
+              <label for="smtp-host">SMTP Host</label>
+              <input id="smtp-host" type="text" placeholder="smtp.gmail.com" />
+            </div>
+            <div class="form-group">
+              <label for="smtp-port">SMTP Port</label>
+              <input id="smtp-port" type="text" placeholder="587" />
+            </div>
+            <div class="form-group">
+              <label for="smtp-user">SMTP User</label>
+              <input id="smtp-user" type="text" placeholder="username@example.com" />
+            </div>
+            <div class="form-group">
+              <label for="smtp-pass">SMTP Password</label>
+              <input id="smtp-pass" type="password" placeholder="password or app password" />
+            </div>
+            <div class="form-group">
+              <label for="notify-email">Notify Email</label>
+              <input id="notify-email" type="email" placeholder="your email" />
+            </div>
+            <div class="form-group">
+              <label for="from-email">From Email</label>
+              <input id="from-email" type="email" placeholder="optional sender address" />
+            </div>
           </div>
-          <div class="form-group">
-            <label for="notify-email">Notify Email</label>
-            <input id="notify-email" type="email" placeholder="your email" />
+
+          <div class="settings-section">
+            <h3>Resy Credentials</h3>
+            <div class="form-group">
+              <label for="resy-api-key">API Key</label>
+              <input id="resy-api-key" type="text" />
+            </div>
+            <div class="form-group">
+              <label for="resy-auth-token">Auth Token</label>
+              <input id="resy-auth-token" type="text" />
+            </div>
           </div>
-          <div class="form-group">
-            <label for="from-email">From Email</label>
-            <input id="from-email" type="email" placeholder="optional sender address" />
-          </div>
-          <div class="form-group">
-            <label for="pushover-token">Pushover Token</label>
-            <input id="pushover-token" type="text" />
-          </div>
-          <div class="form-group">
-            <label for="pushover-user">Pushover User</label>
-            <input id="pushover-user" type="text" />
-          </div>
-          <div class="form-group">
-            <label for="resy-api-key">Resy API Key</label>
-            <input id="resy-api-key" type="text" />
-          </div>
-          <div class="form-group">
-            <label for="resy-auth-token">Resy Auth Token</label>
-            <input id="resy-auth-token" type="text" />
-          </div>
+
           <button type="submit" class="button button-primary">Save Settings</button>
           <div id="settings-message" class="message" hidden></div>
         </form>

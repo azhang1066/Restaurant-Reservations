@@ -353,10 +353,31 @@ def main():
         action="store_true",
         help="Run a single check immediately without scheduling",
     )
+    parser.add_argument(
+        "--test-notify",
+        action="store_true",
+        help="Send a test push notification and exit (no scheduling)",
+    )
     args = parser.parse_args()
-    
+
     logger.info("Restaurant Reservation Notifier started")
-    
+
+    if args.test_notify:
+        from notifiers import get_notifier
+        notifier = get_notifier()
+        provider = os.getenv("NOTIFY_PROVIDER", "ntfy")
+        test_slot = {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "time": "19:30",
+            "party_size": 2,
+        }
+        success = notifier.send("Test Restaurant", test_slot, "https://resy.com")
+        if success:
+            logger.info(f"Test notification sent via {provider}")
+        else:
+            logger.error(f"Test notification failed via {provider} — check your configuration")
+        sys.exit(0)
+
     if args.test:
         logger.info("Running in test mode (single check)")
         run_check()

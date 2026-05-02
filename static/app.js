@@ -209,27 +209,48 @@ async function loadLogs() {
   elements.activityLog.innerHTML = "";
   logs.forEach((log) => {
     const item = document.createElement("div");
-    item.className = `log-item ${log.highlight ? "highlight" : ""}`;
+    item.className = `log-item ${log.highlight ? "highlight" : ""} level-${log.level}`;
     item.innerHTML = `
-      <time>${new Date(log.timestamp).toLocaleString()}</time>
+      <time>${new Date(log.timestamp + "Z").toLocaleString()}</time>
       <p>${log.message}</p>
     `;
     elements.activityLog.appendChild(item);
   });
 }
 
+function updateNtfySubscribeUrl() {
+  const topic = document.getElementById("ntfy-topic").value.trim();
+  const urlEl = document.getElementById("ntfy-subscribe-url");
+  urlEl.textContent = topic ? `ntfy.sh/${topic}` : "ntfy.sh/…";
+}
+
+function handleProviderChange() {
+  const provider = document.getElementById("notify-provider").value;
+  document.getElementById("ntfy-section").hidden = provider !== "ntfy";
+  document.getElementById("pushover-section").hidden = provider !== "pushover";
+}
+
 async function loadSettings() {
   const settings = await apiFetch("/api/settings");
+
+  document.getElementById("notify-provider").value = settings.NOTIFY_PROVIDER || "ntfy";
+  document.getElementById("ntfy-topic").value = settings.NTFY_TOPIC || "";
+  document.getElementById("pushover-user-key").value = settings.PUSHOVER_USER_KEY || "";
+  document.getElementById("pushover-app-token").value = settings.PUSHOVER_APP_TOKEN || "";
+  document.getElementById("notify-via-push").checked = (settings.NOTIFY_VIA_PUSH || "true") !== "false";
+  document.getElementById("notify-via-email").checked = (settings.NOTIFY_VIA_EMAIL || "true") !== "false";
+
   document.getElementById("smtp-host").value = settings.SMTP_HOST || "";
   document.getElementById("smtp-port").value = settings.SMTP_PORT || "";
   document.getElementById("smtp-user").value = settings.SMTP_USER || "";
   document.getElementById("smtp-pass").value = settings.SMTP_PASS || "";
   document.getElementById("notify-email").value = settings.NOTIFY_EMAIL || "";
   document.getElementById("from-email").value = settings.FROM_EMAIL || "";
-  document.getElementById("pushover-token").value = settings.PUSHOVER_TOKEN || "";
-  document.getElementById("pushover-user").value = settings.PUSHOVER_USER || "";
   document.getElementById("resy-api-key").value = settings.RESY_API_KEY || "";
   document.getElementById("resy-auth-token").value = settings.RESY_AUTH_TOKEN || "";
+
+  handleProviderChange();
+  updateNtfySubscribeUrl();
 }
 
 async function resolveUrl() {
@@ -312,19 +333,37 @@ async function submitRestaurantForm(event) {
 async function saveSettings(event) {
   event.preventDefault();
   const payload = {
+    NOTIFY_PROVIDER: document.getElementById("notify-provider").value,
+    NTFY_TOPIC: document.getElementById("ntfy-topic").value.trim(),
+    PUSHOVER_USER_KEY: document.getElementById("pushover-user-key").value.trim(),
+    PUSHOVER_APP_TOKEN: document.getElementById("pushover-app-token").value.trim(),
+    NOTIFY_VIA_PUSH: document.getElementById("notify-via-push").checked ? "true" : "false",
+    NOTIFY_VIA_EMAIL: document.getElementById("notify-via-email").checked ? "true" : "false",
     SMTP_HOST: document.getElementById("smtp-host").value.trim(),
     SMTP_PORT: document.getElementById("smtp-port").value.trim(),
     SMTP_USER: document.getElementById("smtp-user").value.trim(),
     SMTP_PASS: document.getElementById("smtp-pass").value.trim(),
     NOTIFY_EMAIL: document.getElementById("notify-email").value.trim(),
     FROM_EMAIL: document.getElementById("from-email").value.trim(),
-    PUSHOVER_TOKEN: document.getElementById("pushover-token").value.trim(),
-    PUSHOVER_USER: document.getElementById("pushover-user").value.trim(),
     RESY_API_KEY: document.getElementById("resy-api-key").value.trim(),
     RESY_AUTH_TOKEN: document.getElementById("resy-auth-token").value.trim(),
   };
   await apiFetch("/api/settings", { method: "POST", body: JSON.stringify(payload) });
-  showMessage(elements.settingsMessage, "Notification settings saved.", "success");
+  showMessage(elements.settingsMessage, "Settings saved.", "success");
+}
+
+async function testNotification() {
+  const resultEl = document.getElementById("test-notification-result");
+  const btn = document.getElementById("test-notification");
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+
+  const response = await fetch("/api/test-notification", { method: "POST" });
+  const json = await response.json();
+
+  btn.disabled = false;
+  btn.textContent = "Send test notification";
+  showMessage(resultEl, json.message, response.ok ? "success" : "error");
 }
 
 async function initialize() {
@@ -333,10 +372,19 @@ async function initialize() {
   loadRestaurants();
   loadLogs();
   loadSettings();
+
   elements.resolveUrlButton.addEventListener("click", resolveUrl);
   elements.restaurantSource.addEventListener("change", handleSourceChange);
   elements.restaurantForm.addEventListener("submit", submitRestaurantForm);
   elements.settingsForm.addEventListener("submit", saveSettings);
+
+  document.getElementById("notify-provider").addEventListener("change", handleProviderChange);
+  document.getElementById("ntfy-topic").addEventListener("input", updateNtfySubscribeUrl);
+  document.getElementById("copy-ntfy-link").addEventListener("click", () => {
+    const topic = document.getElementById("ntfy-topic").value.trim();
+    if (topic) navigator.clipboard.writeText(`https://ntfy.sh/${topic}`);
+  });
+  document.getElementById("test-notification").addEventListener("click", testNotification);
 
   setInterval(loadLogs, 30000);
 }

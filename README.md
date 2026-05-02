@@ -9,9 +9,11 @@ Automated Python application to monitor Resy and OpenTable for restaurant availa
 - Add multiple restaurants with different search criteria
 
 📧 **Flexible Notifications**
+- Mobile push via **ntfy** (free, no account required)
+- Mobile push via **Pushover** (alternative)
 - Email notifications (SMTP)
-- Pushover mobile/desktop notifications
-- Dual channel support (sends via both when available)
+- Per-channel on/off toggles
+- Smart deduplication — re-notifies only if a slot disappeared and came back
 
 ⏰ **Smart Scheduling**
 - Background monitoring on configurable intervals
@@ -85,11 +87,28 @@ For Gmail:
 
 For other email providers, use your SMTP credentials.
 
-### 4. Pushover (Optional)
+### 4. Push Notifications
+
+#### ntfy (Default — Free, No Account)
+
+ntfy is a free, open-source push notification service.
+
+1. Install the **ntfy** app on your phone:
+   - iOS: [ntfy on the App Store](https://apps.apple.com/app/ntfy/id1625396347)
+   - Android: [ntfy on Google Play](https://play.google.com/store/apps/details?id=io.heckel.ntfy) or [F-Droid](https://f-droid.org/packages/io.heckel.ntfy/)
+2. Open the dashboard at `http://localhost:5000` and go to **Notification Settings**
+3. Your topic (e.g., `resy-notifier-a8f3k2`) is auto-generated — copy the subscribe link shown next to it
+4. In the ntfy app, tap **+** and subscribe to the topic URL shown (e.g., `ntfy.sh/resy-notifier-a8f3k2`)
+5. Click **Send test notification** in the dashboard to confirm it works
+
+The topic acts as a private channel — anyone with the exact URL can receive messages, so keep it secret.
+
+#### Pushover (Alternative)
 
 1. Sign up at [pushover.net](https://pushover.net)
 2. Create an application for this script
-3. Copy your user key and application token
+3. Copy your **User Key** and **App Token** into the dashboard settings (or `.env`)
+4. Set `NOTIFY_PROVIDER=pushover` in `.env` or select Pushover in the dashboard
 
 ### Environment Variables
 
@@ -103,8 +122,14 @@ For other email providers, use your SMTP credentials.
 | `SMTP_PASS` | Email account password or app password | Yes |
 | `NOTIFY_EMAIL` | Email address to send notifications to | Yes |
 | `FROM_EMAIL` | Sender email (optional, defaults to SMTP_USER) | No |
-| `PUSHOVER_TOKEN` | Pushover application token | No |
-| `PUSHOVER_USER` | Pushover user key | No |
+| `NOTIFY_PROVIDER` | `ntfy` or `pushover` (default: `ntfy`) | No |
+| `NTFY_TOPIC` | ntfy topic name (auto-generated if empty) | No |
+| `PUSHOVER_USER_KEY` | Pushover user key | No |
+| `PUSHOVER_APP_TOKEN` | Pushover app token | No |
+| `NOTIFY_VIA_PUSH` | Enable push channel (`true`/`false`) | No |
+| `NOTIFY_VIA_EMAIL` | Enable email channel (`true`/`false`) | No |
+| `PUSHOVER_TOKEN` | Legacy Pushover token (standalone main.py) | No |
+| `PUSHOVER_USER` | Legacy Pushover user (standalone main.py) | No |
 
 ## Usage
 
@@ -114,6 +139,9 @@ python main.py
 
 # Run a single check immediately without scheduling
 python main.py --test
+
+# Send a test push notification and exit
+python main.py --test-notify
 
 # Check logs
 tail -f notifier.log
