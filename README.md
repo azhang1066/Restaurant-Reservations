@@ -119,6 +119,44 @@ python main.py --test
 tail -f notifier.log
 ```
 
+## Web Dashboard
+
+A lightweight dashboard is available for managing restaurants and notification settings.
+
+```bash
+python run_dashboard.py
+```
+
+Or run it as a package:
+
+```bash
+python -m app
+```
+
+Open the dashboard in your browser at:
+
+- `http://localhost:5000`
+
+If you want to access the dashboard from another device on the same WiFi:
+
+1. Find your computer's local IP address.
+2. Open `http://<your-computer-ip>:5000` on the phone or tablet.
+
+Example:
+
+```bash
+http://192.168.1.18:5000
+```
+
+The dashboard includes:
+
+- restaurant watchlist management
+- add restaurants by URL
+- per-restaurant party sizes, days, and time window settings
+- enable/disable and delete controls
+- live activity log with availability events
+- SMTP and Pushover notification configuration
+
 ## Venue ID Lookup Utility
 
 Use the `lookup_venue.py` script to easily find Resy and OpenTable venue IDs:

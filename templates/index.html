@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Restaurant Notifier Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="app-header">
+      <div>
+        <h1>Restaurant Watchlist</h1>
+        <p>Manage monitors, notification settings, and live availability activity.</p>
+      </div>
+      <div class="status-pill" id="status-pill">Loading…</div>
+    </header>
+
+    <main class="dashboard-grid">
+      <section class="panel panel-highlight">
+        <h2>Add Restaurant</h2>
+        <p>Paste a Resy or OpenTable URL to resolve the venue automatically.</p>
+        <div class="form-group">
+          <label for="venue-url">Resy / OpenTable URL</label>
+          <input id="venue-url" type="text" placeholder="https://resy.com/venues/..." />
+        </div>
+        <button id="resolve-url" class="button button-primary">Resolve URL</button>
+        <div id="resolve-result" class="message" hidden></div>
+
+        <form id="restaurant-form" class="restaurant-form">
+          <div class="form-group">
+            <label for="restaurant-name">Restaurant Name</label>
+            <input id="restaurant-name" type="text" placeholder="Restaurant name" required />
+          </div>
+          <div class="form-group">
+            <label for="restaurant-source">Platform</label>
+            <select id="restaurant-source">
+              <option value="resy">Resy</option>
+              <option value="opentable">OpenTable</option>
+            </select>
+          </div>
+          <div class="form-group" id="resy-id-group">
+            <label for="resy-id">Resy Venue ID</label>
+            <input id="resy-id" type="text" placeholder="123456" />
+          </div>
+          <div class="form-group" id="opentable-id-group" hidden>
+            <label for="opentable-id">OpenTable Restaurant ID</label>
+            <input id="opentable-id" type="text" placeholder="12345" />
+          </div>
+          <div class="form-group">
+            <label for="party-sizes">Party Sizes</label>
+            <input id="party-sizes" type="text" placeholder="2 or 2,4" />
+            <small>Comma-separated values, priority order.</small>
+          </div>
+          <div class="form-group">
+            <label>Days</label>
+            <div class="checkbox-grid" id="days-checkboxes"></div>
+          </div>
+          <div class="form-group time-row">
+            <div>
+              <label for="time-earliest">Earliest</label>
+              <input id="time-earliest" type="time" />
+            </div>
+            <div>
+              <label for="time-latest">Latest</label>
+              <input id="time-latest" type="time" />
+            </div>
+          </div>
+          <button type="submit" class="button button-primary">Add Restaurant</button>
+        </form>
+      </section>
+
+      <section class="panel panel-card-list">
+        <div class="section-header">
+          <h2>Watchlist</h2>
+          <span id="restaurant-count">0 restaurants</span>
+        </div>
+        <div id="restaurant-list" class="card-list"></div>
+      </section>
+
+      <section class="panel panel-log">
+        <div class="section-header">
+          <h2>Activity Log</h2>
+          <span id="log-refresh">Auto-refresh every 30s</span>
+        </div>
+        <div id="activity-log" class="log-list"></div>
+      </section>
+
+      <section class="panel panel-settings">
+        <h2>Notification Settings</h2>
+        <form id="settings-form">
+          <div class="form-group">
+            <label for="smtp-host">SMTP Host</label>
+            <input id="smtp-host" type="text" placeholder="smtp.gmail.com" />
+          </div>
+          <div class="form-group">
+            <label for="smtp-port">SMTP Port</label>
+            <input id="smtp-port" type="text" placeholder="587" />
+          </div>
+          <div class="form-group">
+            <label for="smtp-user">SMTP User</label>
+            <input id="smtp-user" type="text" placeholder="username@example.com" />
+          </div>
+          <div class="form-group">
+            <label for="smtp-pass">SMTP Password</label>
+            <input id="smtp-pass" type="password" placeholder="password or app password" />
+          </div>
+          <div class="form-group">
+            <label for="notify-email">Notify Email</label>
+            <input id="notify-email" type="email" placeholder="your email" />
+          </div>
+          <div class="form-group">
+            <label for="from-email">From Email</label>
+            <input id="from-email" type="email" placeholder="optional sender address" />
+          </div>
+          <div class="form-group">
+            <label for="pushover-token">Pushover Token</label>
+            <input id="pushover-token" type="text" />
+          </div>
+          <div class="form-group">
+            <label for="pushover-user">Pushover User</label>
+            <input id="pushover-user" type="text" />
+          </div>
+          <div class="form-group">
+            <label for="resy-api-key">Resy API Key</label>
+            <input id="resy-api-key" type="text" />
+          </div>
+          <div class="form-group">
+            <label for="resy-auth-token">Resy Auth Token</label>
+            <input id="resy-auth-token" type="text" />
+          </div>
+          <button type="submit" class="button button-primary">Save Settings</button>
+          <div id="settings-message" class="message" hidden></div>
+        </form>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>Open <strong>http://localhost:5000</strong> or use your phone on the same WiFi with your machine's IP address.</p>
+    </footer>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
