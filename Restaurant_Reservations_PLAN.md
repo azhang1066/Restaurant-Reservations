@@ -100,6 +100,14 @@ Key architectural decisions:
 
 **Session date:** 2026-05-04
 
+### Resy venue ID auto-lookup from slug (2026-05-04)
+- `ResyAPIClient.get_venue_id_from_slug(slug, city)` in `resy_api.py`: two-strategy lookup:
+  - **Primary**: `GET /3/venue?location_id={id}&url_slug={slug}` — requires a known `location_id` for the city (confirmed: `new-york-ny → 1`); stored in `_LOCATION_IDS` dict
+  - **Fallback**: `GET /3/search?query={name}&lat={lat}&lng={lng}` — for cities not yet in `_LOCATION_IDS`, searches by name and matches by `url_slug`; coords stored in `_CITY_COORDS` for 15 common cities
+  - ID extraction handled by `_extract_venue_id()`, covers both flat `id` and nested `id.resy` response shapes
+- `resolve_url` in `app/app.py` calls this after parsing a new-format Resy URL; result auto-populates the venue ID field in the dashboard; falls back silently if credentials absent
+- **To add a new city**: test its slug+URL, confirm the returned `location_id`, add to `_LOCATION_IDS`
+
 ### OpenTable URL parsing and deep link fixed
 - `lookup_venue.parse_opentable_url()` now returns a 3-tuple `(restaurant_id, restaurant_name, slug)`; handles `/r/{slug}` (current format, no numeric ID) and `/r/{slug}/r{id}` (older format)
 - `/api/resolve-url` returns `opentable_slug` in its response

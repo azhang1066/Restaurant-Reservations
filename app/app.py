@@ -16,6 +16,7 @@ import restaurants as restaurant_config
 from deep_links import build_booking_url
 from lookup_venue import parse_opentable_url, parse_resy_url
 from notifiers import get_notifier
+from resy_api import create_resy_client
 
 load_dotenv()
 
@@ -160,6 +161,10 @@ def resolve_url():
     result = parse_resy_url(url)
     if result:
         venue_id, venue_name, slug, city = result
+        # If the URL didn't contain a numeric venue ID (new format), try to
+        # look it up via the Resy API so monitoring can be set up immediately.
+        if not venue_id and slug and city:
+            venue_id = create_resy_client().get_venue_id_from_slug(slug, city) or ""
         return jsonify(
             {
                 "source": "resy",

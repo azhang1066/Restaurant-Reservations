@@ -149,6 +149,126 @@ class ResyAPIClient:
             logger.error(f"Error searching venues: {e}")
             return []
     
+    # Resy internal location IDs — confirmed by testing against the /3/venue endpoint.
+    # To add a new city: paste a Resy URL and check the numeric ID returned in the
+    # API response, then add the city slug → location_id mapping here.
+    _LOCATION_IDS: dict[str, int] = {
+        "new-york-ny": 1,
+    }
+
+    # Approximate centre coordinates for cities not yet in _LOCATION_IDS,
+    # used as a fallback search strategy.
+    _CITY_COORDS: dict[str, tuple[float, float]] = {
+        "los-angeles-ca":    (34.0522, -118.2437),
+        "chicago-il":        (41.8781,  -87.6298),
+        "miami-fl":          (25.7617,  -80.1918),
+        "san-francisco-ca":  (37.7749, -122.4194),
+        "washington-dc":     (38.9072,  -77.0369),
+        "boston-ma":         (42.3601,  -71.0589),
+        "seattle-wa":        (47.6062, -122.3321),
+        "austin-tx":         (30.2672,  -97.7431),
+        "denver-co":         (39.7392, -104.9903),
+        "nashville-tn":      (36.1627,  -86.7816),
+        "philadelphia-pa":   (39.9526,  -75.1652),
+        "atlanta-ga":        (33.7490,  -84.3880),
+        "las-vegas-nv":      (36.1699, -115.1398),
+        "portland-or":       (45.5152, -122.6784),
+        "new-orleans-la":    (29.9511,  -90.0715),
+    }
+
+    def get_venue_id_from_slug(self, slug: str, city: str) -> Optional[str]:
+        """
+        Look up the numeric Resy venue ID from a URL slug and city slug.
+
+        Primary strategy: GET /3/venue?location_id={id}&url_slug={slug}
+            Requires a known location_id for the city (see _LOCATION_IDS).
+        Fallback strategy: GET /3/search?query={slug}&lat={lat}&lng={lng}
+            Used when the city is not yet in _LOCATION_IDS; matches results
+            by url_slug to find the exact venue.
+
+        Args:
+            slug: venue URL slug (e.g. "j-bespoke")
+            city: city slug from the Resy URL (e.g. "new-york-ny")
+
+        Returns:
+            Numeric venue ID as a string, or None if not found / no credentials.
+        """
+        if not self.api_key or not self.auth_token:
+            logger.warning("Resy credentials not configured — cannot look up venue ID")
+            return None
+
+        location_id = self._LOCATION_IDS.get(city)
+        if location_id:
+            return self._lookup_by_location_id(slug, location_id)
+
+        # City not yet mapped — fall back to coordinate-based search.
+        coords = self._CITY_COORDS.get(city)
+        if coords:
+            logger.info(f"No location_id for city={city!r}; using search fallback")
+            return self._lookup_by_search(slug, coords[0], coords[1])
+
+        logger.warning(
+            f"Unknown city {city!r} — add it to _LOCATION_IDS or _CITY_COORDS "
+            f"in resy_api.py to enable venue ID lookup"
+        )
+        return None
+
+    def _lookup_by_location_id(self, slug: str, location_id: int) -> Optional[str]:
+        """GET /3/venue?location_id={location_id}&url_slug={slug}"""
+        try:
+            response = requests.get(
+                f"{self.BASE_URL}/3/venue",
+                headers=self._get_headers(),
+                params={"location_id": location_id, "url_slug": slug},
+                timeout=10,
+            )
+            response.raise_for_status()
+            return self._extract_venue_id(response.json(), slug)
+        except requests.exceptions.Timeout:
+            logger.error(f"Timeout on /3/venue for slug={slug!r}")
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"HTTP {e.response.status_code} on /3/venue for slug={slug!r}")
+        except Exception as e:
+            logger.error(f"Error on /3/venue for slug={slug!r}: {e}")
+        return None
+
+    def _lookup_by_search(self, slug: str, lat: float, lng: float) -> Optional[str]:
+        """Search /3/search and find the result whose url_slug matches exactly."""
+        query = slug.replace("-", " ")
+        try:
+            response = requests.get(
+                f"{self.BASE_URL}/3/search",
+                headers=self._get_headers(),
+                params={"query": query, "lat": lat, "lng": lng, "per_page": 10},
+                timeout=10,
+            )
+            response.raise_for_status()
+            data = response.json()
+            for result in data.get("results", {}).get("venues", []):
+                venue = result.get("venue") or result
+                if venue.get("url_slug") == slug:
+                    return self._extract_venue_id(venue, slug)
+            logger.warning(f"No search result matched url_slug={slug!r}")
+        except requests.exceptions.Timeout:
+            logger.error(f"Timeout on /3/search for slug={slug!r}")
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"HTTP {e.response.status_code} on /3/search for slug={slug!r}")
+        except Exception as e:
+            logger.error(f"Error on /3/search for slug={slug!r}: {e}")
+        return None
+
+    @staticmethod
+    def _extract_venue_id(data: dict, slug: str) -> Optional[str]:
+        """Pull the numeric venue ID out of a /3/venue or search result dict."""
+        venue = data.get("venue", data)
+        raw_id = venue.get("id")
+        if isinstance(raw_id, dict):
+            raw_id = raw_id.get("resy")
+        if raw_id:
+            return str(raw_id)
+        logger.warning(f"Venue ID not found in response for slug={slug!r}")
+        return None
+
     def get_availability(
         self,
         venue_id: str,
