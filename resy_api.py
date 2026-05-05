@@ -6,6 +6,7 @@ Handles all API interactions with better structure and error handling.
 
 import logging
 import os
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
@@ -205,7 +206,7 @@ class ResyAPIClient:
         coords = self._CITY_COORDS.get(city)
         if coords:
             logger.info(f"No location_id for city={city!r}; using search fallback")
-            return self._lookup_by_search(slug, coords[0], coords[1])
+            return self._lookup_by_search(slug, coords[0], coords[1], city)
 
         logger.warning(
             f"Unknown city {city!r} — add it to _LOCATION_IDS or _CITY_COORDS "
@@ -232,8 +233,12 @@ class ResyAPIClient:
             logger.error(f"Error on /3/venue for slug={slug!r}: {e}")
         return None
 
-    def _lookup_by_search(self, slug: str, lat: float, lng: float) -> Optional[str]:
-        """Search /3/search and find the result whose url_slug matches exactly."""
+    def _lookup_by_search(self, slug: str, lat: float, lng: float, city: Optional[str] = None) -> Optional[str]:
+        """Search /3/search and find the result whose url_slug matches exactly.
+
+        If city is provided and not yet in _LOCATION_IDS, triggers a background
+        probe to discover its location_id so future lookups use the faster primary path.
+        """
         query = slug.replace("-", " ")
         try:
             response = requests.get(
@@ -247,7 +252,14 @@ class ResyAPIClient:
             for result in data.get("results", {}).get("venues", []):
                 venue = result.get("venue") or result
                 if venue.get("url_slug") == slug:
-                    return self._extract_venue_id(venue, slug)
+                    venue_id = self._extract_venue_id(venue, slug)
+                    if venue_id and city and city not in self._LOCATION_IDS:
+                        threading.Thread(
+                            target=self._auto_discover_location_id,
+                            args=(slug, city),
+                            daemon=True,
+                        ).start()
+                    return venue_id
             logger.warning(f"No search result matched url_slug={slug!r}")
         except requests.exceptions.Timeout:
             logger.error(f"Timeout on /3/search for slug={slug!r}")
@@ -256,6 +268,96 @@ class ResyAPIClient:
         except Exception as e:
             logger.error(f"Error on /3/search for slug={slug!r}: {e}")
         return None
+
+    def _auto_discover_location_id(self, slug: str, city: str) -> Optional[int]:
+        """Probe location_ids 1-30 to find the one that owns this slug.
+
+        Updates _LOCATION_IDS in-place on success so future lookups in the same
+        process skip the coordinate fallback. Logs a paste-ready hint so the user
+        can make the mapping permanent in source.
+        """
+        for loc_id in range(1, 31):
+            try:
+                resp = requests.get(
+                    f"{self.BASE_URL}/3/venue",
+                    headers=self._get_headers(),
+                    params={"location_id": loc_id, "url_slug": slug},
+                    timeout=5,
+                )
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                venue = data.get("venue", data)
+                if venue.get("url_slug") == slug and self._extract_venue_id(venue, slug):
+                    self.__class__._LOCATION_IDS[city] = loc_id
+                    logger.info(
+                        f"Auto-discovered location_id={loc_id} for city={city!r}. "
+                        f"Add '\"{city}\": {loc_id},' to _LOCATION_IDS in resy_api.py to make it permanent."
+                    )
+                    return loc_id
+            except Exception:
+                pass
+        logger.debug(f"Could not auto-discover location_id for city={city!r} (tried 1-30)")
+        return None
+
+    def discover_all_location_ids(self) -> dict[str, int]:
+        """Discover location_ids for every city in _CITY_COORDS not already in _LOCATION_IDS.
+
+        For each unmapped city, uses the coordinate search to find any venue, then
+        probes location_ids 1-30 to confirm which city bucket it lives in.
+        Logs a ready-to-paste _LOCATION_IDS block on completion.
+
+        Requires valid Resy credentials (RESY_API_KEY + RESY_AUTH_TOKEN).
+        Run via: python main.py --discover-locations
+        """
+        result: dict[str, int] = dict(self._LOCATION_IDS)
+
+        for city, (lat, lng) in self._CITY_COORDS.items():
+            if city in result:
+                logger.info(f"  {city}: {result[city]} (already known)")
+                continue
+
+            logger.info(f"  {city}: searching for a sample venue...")
+            try:
+                resp = requests.get(
+                    f"{self.BASE_URL}/3/search",
+                    headers=self._get_headers(),
+                    params={"query": "", "lat": lat, "lng": lng, "per_page": 5},
+                    timeout=10,
+                )
+                if resp.status_code != 200:
+                    logger.warning(f"  {city}: search returned HTTP {resp.status_code}")
+                    continue
+                venues = resp.json().get("results", {}).get("venues", [])
+                slug = next(
+                    (
+                        (v.get("venue") or v).get("url_slug")
+                        for v in venues
+                        if (v.get("venue") or v).get("url_slug")
+                    ),
+                    None,
+                )
+                if not slug:
+                    logger.warning(f"  {city}: no url_slug found in search results")
+                    continue
+
+                logger.info(f"  {city}: probing with slug={slug!r}...")
+                loc_id = self._auto_discover_location_id(slug, city)
+                if loc_id:
+                    result[city] = loc_id
+                else:
+                    logger.warning(f"  {city}: location_id not found in range 1-30")
+            except Exception as e:
+                logger.error(f"  {city}: error — {e}")
+
+        lines = [f'        "{city}": {lid},' for city, lid in sorted(result.items())]
+        logger.info(
+            "Discovered _LOCATION_IDS — paste into resy_api.py:\n"
+            "    _LOCATION_IDS: dict[str, int] = {\n"
+            + "\n".join(lines)
+            + "\n    }"
+        )
+        return result
 
     @staticmethod
     def _extract_venue_id(data: dict, slug: str) -> Optional[str]:

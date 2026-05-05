@@ -322,9 +322,21 @@ def main():
         action="store_true",
         help="Send a test push notification and exit (no scheduling)",
     )
+    parser.add_argument(
+        "--discover-locations",
+        action="store_true",
+        help="Discover Resy location_ids for all cities in _CITY_COORDS and log a paste-ready mapping",
+    )
     args = parser.parse_args()
 
     logger.info("Restaurant Reservation Notifier started")
+
+    if args.discover_locations:
+        from resy_api import create_resy_client
+        logger.info("Discovering Resy location_ids for all configured cities...")
+        client = create_resy_client()
+        client.discover_all_location_ids()
+        sys.exit(0)
 
     if args.test_notify:
         from notifiers import get_notifier

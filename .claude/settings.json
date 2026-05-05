@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import sys,json; [print\\(f['name'], f['download_url']\\) for f in json.load\\(sys.stdin\\) if 'download_url' in f]\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -m py_compile resy_api.py)",
+      "Bash(python3 -m py_compile main.py)"
+    ]
+  }
+}

@@ -7,7 +7,11 @@
       "WebFetch(domain:medium.com)",
       "WebFetch(domain:api.resy.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:apify.com)"
+      "WebFetch(domain:apify.com)",
+      "Bash(gh api *)",
+      "Bash(python3 -c \"import sys,json; [print\\(f['name']\\) for f in json.load\\(sys.stdin\\)]\")",
+      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(f['path']\\) for f in data.get\\('tree',[]\\)]\")",
+      "WebFetch(domain:lobehub.com)"
     ]
   }
 }

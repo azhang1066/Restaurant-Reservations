@@ -95,7 +95,12 @@ Key architectural decisions:
 
 ## Completed This Session
 
-**Session date:** 2026-05-04
+**Session date:** 2026-05-05
+
+### Resy location_id auto-discovery (Priority 2)
+- `_auto_discover_location_id(slug, city)` — brute-probes IDs 1–30 on `/3/venue`, caches hit in `_LOCATION_IDS`, logs paste-ready hint
+- `_lookup_by_search` fires discovery in daemon thread after first successful coordinate-based lookup for a city
+- `discover_all_location_ids()` batch method + `python main.py --discover-locations` CLI flag
 
 ### Resy & OpenTable URL parsing
 - `parse_resy_url()` updated to 4-tuple; correctly parses current `/cities/{city}/venues/{slug}` format
@@ -139,8 +144,12 @@ Key architectural decisions:
 ### Priority 1 — Availability count badge (Stage 7)
 Add a small badge to each watchlist card showing the number of available slots found in the last check. Requires storing the latest slot count per restaurant (e.g. a `last_slot_count` column or in-memory dict) and surfacing it via the `/api/restaurants` response.
 
-### Priority 2 — Expand Resy location_id mapping
-`_LOCATION_IDS` in `resy_api.py` currently only has `new-york-ny → 1`. For each new city, check browser DevTools on resy.com to find the `location_id` used in `/3/venue` requests, then add it to the dict.
+### Priority 2 — Expand Resy location_id mapping ✅
+Auto-discovery built into `resy_api.py`:
+- `_auto_discover_location_id(slug, city)` — probes location_ids 1–30 on `/3/venue`, updates `_LOCATION_IDS` in-place, logs a paste-ready hint for permanent storage
+- `_lookup_by_search` now accepts `city` and kicks off `_auto_discover_location_id` in a daemon thread after a successful coordinate-based lookup
+- `discover_all_location_ids()` — batch discovers every city in `_CITY_COORDS`; logs a full paste-ready `_LOCATION_IDS` block
+- CLI: `python main.py --discover-locations` (refresh Resy credentials first; auth token expires)
 
 ### Priority 3 — End-to-end live test
 Run a full check cycle with a real Resy and OpenTable restaurant; verify:
