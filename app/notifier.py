@@ -2,6 +2,7 @@ import logging
 import os
 import threading
 import time
+from datetime import datetime, timezone
 
 import schedule
 from dotenv import load_dotenv
@@ -21,6 +22,8 @@ from notifiers import get_notifier
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+last_check_time: datetime | None = None
 
 
 def check_restaurant(restaurant: dict) -> None:
@@ -142,6 +145,8 @@ def check_restaurant(restaurant: dict) -> None:
 
 
 def run_check() -> None:
+    global last_check_time
+
     logger.info("Starting availability check")
     db.add_activity_log("Starting availability check", "info")
 
@@ -163,6 +168,7 @@ def run_check() -> None:
 
     logger.info("Availability check complete")
     db.add_activity_log("Availability check complete", "info")
+    last_check_time = datetime.now(timezone.utc)
 
 
 def start_scheduler() -> None:

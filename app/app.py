@@ -2,14 +2,16 @@ import json
 import os
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 
 from . import db
+from . import notifier as _notifier
 from .notifier import start_background_scheduler
+import restaurants as restaurant_config
 from deep_links import build_booking_url
 from lookup_venue import parse_opentable_url, parse_resy_url
 from notifiers import get_notifier
@@ -254,6 +256,19 @@ def restaurant_deep_link(restaurant_id: int):
     slot = {"date": date, "time": time_str, "party_size": party_size}
     urls = build_booking_url(restaurant["source"], restaurant, slot)
     return jsonify(urls)
+
+
+@app.route("/api/status", methods=["GET"])
+def get_status():
+    last_check = _notifier.last_check_time
+    next_check = None
+    if last_check:
+        next_check = last_check + timedelta(minutes=restaurant_config.CHECK_INTERVAL_MINUTES)
+    return jsonify({
+        "last_check": last_check.isoformat() if last_check else None,
+        "next_check": next_check.isoformat() if next_check else None,
+        "restaurant_count": len(db.get_restaurants()),
+    })
 
 
 if __name__ == "__main__":

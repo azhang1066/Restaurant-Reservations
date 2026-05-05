@@ -185,6 +185,7 @@ The dashboard includes:
 - per-day time windows (e.g. Friday 6–9 pm only)
 - live activity log with availability events and **Book Now →** deep links
 - push and email notification configuration
+- scheduler status pill — shows time since last check and minutes until the next one (updates every 30 s)
 
 ## Deep Link Booking URLs
 

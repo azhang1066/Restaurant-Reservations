@@ -480,6 +480,25 @@ async function testNotification() {
   showMessage(resultEl, json.message, response.ok ? "success" : "error");
 }
 
+async function loadStatus() {
+  const data = await apiFetch("/api/status");
+  const pill = document.getElementById("status-pill");
+  if (!data.last_check) {
+    pill.textContent = "Checking…";
+    return;
+  }
+  const last = new Date(data.last_check);
+  const diffMin = Math.round((Date.now() - last.getTime()) / 60000);
+  const lastText = diffMin < 1 ? "just now" : `${diffMin} min ago`;
+  let text = `Last check: ${lastText}`;
+  if (data.next_check) {
+    const next = new Date(data.next_check);
+    const nextMin = Math.round((next.getTime() - Date.now()) / 60000);
+    if (nextMin > 0) text += ` · Next: ${nextMin} min`;
+  }
+  pill.textContent = text;
+}
+
 async function initialize() {
   buildDaysTimeGrid(elements.daysTimeGrid);
   addFormChipInput = new ChipInput(elements.partySizesChips);
@@ -487,6 +506,7 @@ async function initialize() {
   loadRestaurants();
   loadLogs();
   loadSettings();
+  loadStatus();
 
   elements.resolveUrlButton.addEventListener("click", resolveUrl);
   elements.restaurantSource.addEventListener("change", handleSourceChange);
@@ -502,6 +522,7 @@ async function initialize() {
   document.getElementById("test-notification").addEventListener("click", testNotification);
 
   setInterval(loadLogs, 30000);
+  setInterval(loadStatus, 30000);
 }
 
 initialize();
