@@ -165,3 +165,31 @@
 2026-05-04 20:56:59,541 - INFO - 127.0.0.1 - - [04/May/2026 20:56:59] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
 2026-05-04 20:57:02,225 - INFO - 127.0.0.1 - - [04/May/2026 20:57:02] "GET /api/logs HTTP/1.1" 200 -
 2026-05-04 20:57:02,540 - INFO - 127.0.0.1 - - [04/May/2026 20:57:02] "GET /api/status HTTP/1.1" 200 -
+2026-05-04 21:04:56,295 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.156:5000
+2026-05-04 21:04:56,299 - INFO - [33mPress CTRL+C to quit[0m
+2026-05-04 21:04:56,301 - INFO - Starting scheduler thread
+2026-05-04 21:04:56,301 - INFO - Starting availability check
+2026-05-04 21:04:56,321 - INFO - Checking Nobu Malibu (resy) for Friday (2026-05-08) size=2
+2026-05-04 21:04:56,340 - WARNING - Resy credentials not configured
+2026-05-04 21:04:57,303 - ERROR - HTTP error 419
+2026-05-04 21:04:57,350 - INFO - Checking Nobu Malibu (resy) for Saturday (2026-05-09) size=2
+2026-05-04 21:04:57,375 - WARNING - Resy credentials not configured
+2026-05-04 21:04:58,780 - ERROR - HTTP error 419
+2026-05-04 21:04:58,831 - INFO - Availability check complete
+2026-05-04 21:05:02,496 - INFO - 127.0.0.1 - - [04/May/2026 21:05:02] "GET /api/status HTTP/1.1" 200 -
+2026-05-04 21:05:02,499 - INFO - 127.0.0.1 - - [04/May/2026 21:05:02] "GET /api/logs HTTP/1.1" 200 -
+2026-05-04 21:05:02,750 - INFO - 127.0.0.1 - - [04/May/2026 21:05:02] "GET / HTTP/1.1" 200 -
+2026-05-04 21:05:03,371 - INFO - 127.0.0.1 - - [04/May/2026 21:05:03] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+2026-05-04 21:05:03,578 - INFO - 127.0.0.1 - - [04/May/2026 21:05:03] "GET /static/app.js HTTP/1.1" 200 -
+2026-05-04 21:05:03,600 - INFO - 127.0.0.1 - - [04/May/2026 21:05:03] "GET /api/restaurants HTTP/1.1" 200 -
+2026-05-04 21:05:03,905 - INFO - 127.0.0.1 - - [04/May/2026 21:05:03] "GET /api/settings HTTP/1.1" 200 -
+2026-05-04 21:05:03,909 - INFO - 127.0.0.1 - - [04/May/2026 21:05:03] "GET /api/logs HTTP/1.1" 200 -
+2026-05-04 21:05:03,913 - INFO - 127.0.0.1 - - [04/May/2026 21:05:03] "GET /api/status HTTP/1.1" 200 -
+2026-05-04 21:05:12,984 - INFO - 127.0.0.1 - - [04/May/2026 21:05:12] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
+2026-05-04 21:05:14,904 - INFO - 127.0.0.1 - - [04/May/2026 21:05:14] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
+2026-05-04 21:05:16,277 - INFO - 127.0.0.1 - - [04/May/2026 21:05:16] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
+2026-05-04 21:05:16,544 - INFO - 127.0.0.1 - - [04/May/2026 21:05:16] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
+2026-05-04 21:05:20,485 - INFO - 127.0.0.1 - - [04/May/2026 21:05:20] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -

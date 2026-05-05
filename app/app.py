@@ -87,6 +87,7 @@ def create_restaurant():
         "source": payload["source"].strip().lower(),
         "resy_venue_id": payload.get("resy_venue_id"),
         "resy_slug": payload.get("resy_slug") or "",
+        "resy_city": payload.get("resy_city") or "",
         "opentable_rid": payload.get("opentable_rid"),
         "party_sizes": payload.get("party_sizes", []),
         "days": payload.get("days", []),
@@ -157,13 +158,14 @@ def resolve_url():
 
     result = parse_resy_url(url)
     if result:
-        venue_id, venue_name, slug = result
+        venue_id, venue_name, slug, city = result
         return jsonify(
             {
                 "source": "resy",
                 "name": venue_name,
                 "resy_venue_id": venue_id,
                 "resy_slug": slug,
+                "resy_city": city,
             }
         )
 

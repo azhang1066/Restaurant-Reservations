@@ -81,6 +81,7 @@ function getSelectedDaysAndTimes(container) {
 
 let addFormChipInput;
 let _resolvedResySlug = "";
+let _resolvedResyCity = "";
 
 class ChipInput {
   constructor(container) {
@@ -387,10 +388,12 @@ async function resolveUrl() {
     elements.resyId.value = json.resy_venue_id || "";
     elements.opentableId.value = json.opentable_rid || "";
     _resolvedResySlug = json.resy_slug || "";
+    _resolvedResyCity = json.resy_city || "";
     handleSourceChange();
     showMessage(elements.resolveResult, "URL resolved. Review and add the restaurant.", "success");
   } else {
     _resolvedResySlug = "";
+    _resolvedResyCity = "";
     showMessage(elements.resolveResult, json.error || "Could not resolve URL.", "error");
   }
 }
@@ -411,6 +414,7 @@ async function submitRestaurantForm(event) {
     source: elements.restaurantSource.value,
     resy_venue_id: elements.restaurantSource.value === "resy" ? elements.resyId.value.trim() : null,
     resy_slug: elements.restaurantSource.value === "resy" ? _resolvedResySlug : "",
+    resy_city: elements.restaurantSource.value === "resy" ? _resolvedResyCity : "",
     opentable_rid: elements.restaurantSource.value === "opentable" ? elements.opentableId.value.trim() : null,
     party_sizes: addFormChipInput.getValues(),
     days: days,
@@ -426,8 +430,8 @@ async function submitRestaurantForm(event) {
     showMessage(elements.resolveResult, "Select at least one day.", "error");
     return;
   }
-  if (payload.source === "resy" && !payload.resy_venue_id) {
-    showMessage(elements.resolveResult, "Resy venue ID is required.", "error");
+  if (payload.source === "resy" && !payload.resy_venue_id && !(payload.resy_slug && payload.resy_city)) {
+    showMessage(elements.resolveResult, "Paste a Resy URL to resolve the venue (or enter a venue ID manually).", "error");
     return;
   }
   if (payload.source === "opentable" && !payload.opentable_rid) {
@@ -444,6 +448,7 @@ async function submitRestaurantForm(event) {
   elements.restaurantForm.reset();
   addFormChipInput.setValues([]);
   _resolvedResySlug = "";
+  _resolvedResyCity = "";
   buildDaysTimeGrid(elements.daysTimeGrid);
   handleSourceChange();
   loadRestaurants();

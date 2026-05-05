@@ -100,12 +100,16 @@ Key architectural decisions:
 
 **Session date:** 2026-05-04
 
-### Resy slug storage (Priority 1)
-- `lookup_venue.parse_resy_url()` now returns a 3-tuple `(venue_id, venue_name, slug)` — slug is the raw URL path segment, not re-derived from the display name
-- `/api/resolve-url` returns `resy_slug` in its response
-- `restaurants` table: added `resy_slug TEXT` column with ALTER TABLE migration in `app/db.py`; `_row_to_restaurant`, `add_restaurant`, and `update_restaurant` all wired through
-- `deep_links._resy_candidate()`: prefers `venue["resy_slug"]` over `_to_slug(name)` fallback
-- `static/app.js`: `_resolvedResySlug` module-level variable captures slug from resolve response; sent in create payload; cleared on form reset
+### Resy deep link format fixed (Priority 1) ✅
+Confirmed URL format from live example: `resy.com/cities/{city}/venues/{slug}?date=YYYY-MM-DD&seats=N`
+
+- `lookup_venue.parse_resy_url()` now returns a 4-tuple `(venue_id, venue_name, slug, city)`; handles `/cities/{city}/venues/{slug}` (current), `/venues/{slug}/{id}` (old), and `/venues/{id}` (legacy)
+- `/api/resolve-url` returns `resy_slug` and `resy_city` in its response
+- `restaurants` table: added `resy_slug TEXT` and `resy_city TEXT` columns with ALTER TABLE migration in `app/db.py`; all CRUD wired through
+- `deep_links._resy_candidate()`: uses `cities/{city}/venues/{slug}?date=...&seats=...`; returns `""` if city missing (HEAD check fails → falls back to venue homepage)
+- `deep_links._resy_fallback()`: uses `cities/{city}/venues/{slug}` without date params as plain venue link
+- `static/app.js`: `_resolvedResyCity` captured from resolve response; sent in create payload; cleared on form reset; form validation relaxed to accept city+slug in lieu of numeric venue ID
+- Note: `resy_venue_id` (numeric) is NOT in the new URL format — monitoring API still requires it; restaurant will save but monitoring won't run without it (notifier logs a warning and skips)
 
 ### "Check Now" button (Stage 7 / Priority 2)
 - Added `_check_running: bool` flag to `app/notifier.py`; `run_check()` returns early if already running and clears the flag in a `finally`-equivalent block after completion — prevents overlapping runs from the scheduler and a manual trigger
@@ -174,15 +178,6 @@ Key architectural decisions:
 
 These are ready to pick up immediately in the next session with no additional context required.
 
-### Priority 1 — Verify Resy deep link format ✅ (partial)
-Implemented Option A: `resy_slug` is now stored at add-time (faithful to the URL the user pasted) and used in `_resy_candidate()` instead of re-deriving from the display name.
-
-**What was done (2026-05-04):**
-- `lookup_venue.parse_resy_url()` now returns a 3-tuple `(venue_id, venue_name, slug)`
-- `/api/resolve-url` includes `resy_slug` in its response
-- `restaurants` table has a new `resy_slug TEXT` column (migrated via ALTER TABLE on startup)
-- `deep_links._resy_candidate()` prefers `venue["resy_slug"]` over `_to_slug(name)` fallback
-- Frontend captures and sends `resy_slug` when adding a restaurant
-
-**Still unverified:** The URL format `resy.com/venues/{slug}/{venue_id}?date=...&seats=...` has not been confirmed against a live browser session. If it 404s, consider Option B (store city and use `/cities/{city}/venues/{slug}` format).
+### Priority 1 — Resy deep link format ✅
+Confirmed format: `resy.com/cities/{city}/venues/{slug}?date=YYYY-MM-DD&seats=N` (city+slug, no numeric ID in path). All implemented — see "Completed This Session."
 

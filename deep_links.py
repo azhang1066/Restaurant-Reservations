@@ -5,8 +5,8 @@ Deep link builder for Resy and OpenTable booking flows.
 Constructs pre-filled booking URLs so a push notification can drop the user
 directly into the reservation confirmation screen, not the restaurant homepage.
 
-URL formats confirmed via network inspection:
-  Resy:      resy.com/venues/{slug}/{venue_id}?date=YYYY-MM-DD&seats=N
+URL formats:
+  Resy:      resy.com/cities/{city}/venues/{slug}?date=YYYY-MM-DD&seats=N
   OpenTable: www.opentable.com/r/{rid}?covers=N&dateTime=YYYY-MM-DDTHH:MM
 
 Native app deep link schemes (resy:// / opentable://) are not publicly
@@ -42,18 +42,25 @@ def _to_slug(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _resy_candidate(venue: dict, slot: dict) -> str:
-    venue_id = venue.get("resy_venue_id", "")
+    city = venue.get("resy_city", "")
     # Prefer the slug stored at add-time (faithful to the original URL) over
     # a slug re-derived from the display name (lossy for special chars/abbrevs).
     slug = venue.get("resy_slug") or _to_slug(venue.get("name", "venue"))
     date = slot.get("date", "")
     party_size = slot.get("party_size", 2)
-    return f"https://resy.com/venues/{slug}/{venue_id}?date={date}&seats={party_size}"
+    if not city or not slug:
+        return ""  # Can't build valid URL without city — HEAD check will fall back
+    return f"https://resy.com/cities/{city}/venues/{slug}?date={date}&seats={party_size}"
 
 
 def _resy_fallback(venue: dict) -> str:
-    venue_id = venue.get("resy_venue_id", "")
-    return f"https://resy.com/venues/{venue_id}"
+    city = venue.get("resy_city", "")
+    slug = venue.get("resy_slug") or _to_slug(venue.get("name", "venue"))
+    if city and slug:
+        return f"https://resy.com/cities/{city}/venues/{slug}"
+    if slug:
+        return f"https://resy.com/venues/{slug}"
+    return "https://resy.com"
 
 
 def _opentable_candidate(venue: dict, slot: dict) -> str:
@@ -158,8 +165,10 @@ Examples:
 """,
     )
     parser.add_argument("--platform", required=True, choices=["resy", "opentable"])
-    parser.add_argument("--venue-id", required=True, help="Numeric venue/restaurant ID")
-    parser.add_argument("--venue-name", default="restaurant", help="Venue name (used for slug)")
+    parser.add_argument("--venue-id", default="", help="Numeric venue/restaurant ID (Resy: not required for deep link)")
+    parser.add_argument("--venue-name", default="restaurant", help="Venue name (used for slug fallback)")
+    parser.add_argument("--venue-slug", default="", help="Resy venue slug from URL (e.g. j-bespoke)")
+    parser.add_argument("--venue-city", default="", help="Resy city slug from URL (e.g. new-york-ny)")
     parser.add_argument("--date", required=True, help="YYYY-MM-DD")
     parser.add_argument("--time", default="19:00", help="HH:MM (24h)")
     parser.add_argument("--party-size", type=int, default=2)
@@ -170,7 +179,12 @@ Examples:
 
     venue: dict
     if args.platform == "resy":
-        venue = {"name": args.venue_name, "resy_venue_id": args.venue_id}
+        venue = {
+            "name": args.venue_name,
+            "resy_venue_id": args.venue_id,
+            "resy_slug": args.venue_slug,
+            "resy_city": args.venue_city,
+        }
     else:
         venue = {"name": args.venue_name, "opentable_rid": args.venue_id}
 

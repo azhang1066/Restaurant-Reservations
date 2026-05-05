@@ -19,38 +19,45 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def parse_resy_url(url: str) -> tuple[str, str, str] | None:
+def parse_resy_url(url: str) -> tuple[str, str, str, str] | None:
     """
-    Parse a Resy URL to extract venue ID, display name, and raw slug.
-
-    Args:
-        url: Resy URL (e.g., https://resy.com/venues/venue-name/12345)
+    Parse a Resy URL to extract venue ID, display name, slug, and city slug.
 
     Returns:
-        Tuple of (venue_id, venue_name, slug) or None if parsing fails.
-        slug is the raw path segment as-is (e.g. "le-bernardin"), preserved
-        so deep links can use it without a lossy name→slug round-trip.
+        Tuple of (venue_id, venue_name, slug, city) or None if parsing fails.
+        venue_id may be "" for current-format URLs that don't include a numeric ID.
+        city may be "" for old-format URLs.
+
+    Supported formats:
+        /cities/{city}/venues/{slug}        ← current Resy format
+        /venues/{slug}/{venue-id}           ← older format
+        /venues/{venue-id}                  ← legacy
     """
     try:
         parsed = urlparse(url)
         if "resy.com" not in parsed.netloc:
             return None
 
-        # Handle different URL formats
         path_parts = parsed.path.strip("/").split("/")
 
-        # Format: /venues/venue-name/venue-id
+        # Current format: /cities/{city}/venues/{slug}
+        if (len(path_parts) >= 4 and path_parts[0] == "cities"
+                and path_parts[2] == "venues"):
+            city = path_parts[1]
+            slug = path_parts[3]
+            return "", slug.replace("-", " ").title(), slug, city
+
+        # Older format: /venues/{slug}/{venue-id}
         if len(path_parts) >= 3 and path_parts[0] == "venues":
             slug = path_parts[1]
             venue_id = path_parts[2]
-
-            # Check if venue_id is numeric
             if venue_id.isdigit():
-                return venue_id, slug.replace("-", " ").title(), slug
+                return venue_id, slug.replace("-", " ").title(), slug, ""
 
-        # Format: /venues/venue-id (numeric ID only)
-        elif len(path_parts) == 2 and path_parts[0] == "venues" and path_parts[1].isdigit():
-            return path_parts[1], "Unknown Venue", ""
+        # Legacy format: /venues/{venue-id}
+        if (len(path_parts) == 2 and path_parts[0] == "venues"
+                and path_parts[1].isdigit()):
+            return path_parts[1], "Unknown Venue", "", ""
 
         return None
     except Exception as e:
@@ -252,14 +259,17 @@ Examples:
     if args.resy_url:
         result = parse_resy_url(args.resy_url)
         if result:
-            venue_id, venue_name, slug = result
+            venue_id, venue_name, slug, city = result
             print("🎯 Resy Venue Found:")
             print(f"   Name: {venue_name}")
-            print(f"   Venue ID: {venue_id}")
+            if venue_id:
+                print(f"   Venue ID: {venue_id}")
+            print(f"   City: {city or '(unknown)'}")
             print(f"   Slug: {slug}")
-            print(f"   URL: https://resy.com/venues/{slug}/{venue_id}")
+            if city and slug:
+                print(f"   URL: https://resy.com/cities/{city}/venues/{slug}")
         else:
-            print("❌ Could not parse Resy URL. Expected format: https://resy.com/venues/venue-name/12345")
+            print("❌ Could not parse Resy URL. Expected format: https://resy.com/cities/new-york-ny/venues/venue-slug")
         return
 
     if args.opentable_url:
