@@ -100,6 +100,13 @@ Key architectural decisions:
 
 **Session date:** 2026-05-04
 
+### Resy slug storage (Priority 1)
+- `lookup_venue.parse_resy_url()` now returns a 3-tuple `(venue_id, venue_name, slug)` — slug is the raw URL path segment, not re-derived from the display name
+- `/api/resolve-url` returns `resy_slug` in its response
+- `restaurants` table: added `resy_slug TEXT` column with ALTER TABLE migration in `app/db.py`; `_row_to_restaurant`, `add_restaurant`, and `update_restaurant` all wired through
+- `deep_links._resy_candidate()`: prefers `venue["resy_slug"]` over `_to_slug(name)` fallback
+- `static/app.js`: `_resolvedResySlug` module-level variable captures slug from resolve response; sent in create payload; cleared on form reset
+
 ### "Check Now" button (Stage 7 / Priority 2)
 - Added `_check_running: bool` flag to `app/notifier.py`; `run_check()` returns early if already running and clears the flag in a `finally`-equivalent block after completion — prevents overlapping runs from the scheduler and a manual trigger
 - Added `POST /api/check-now` endpoint in `app/app.py`; returns 409 if a check is already in progress, otherwise spawns a daemon thread calling `run_check()` and returns immediately
@@ -167,14 +174,15 @@ Key architectural decisions:
 
 These are ready to pick up immediately in the next session with no additional context required.
 
-### Priority 1 — Verify Resy deep link format
-The Resy URL `resy.com/venues/{slug}/{venue_id}?date=...&seats=...` is reverse-engineered from `lookup_venue.py` output, not confirmed against a live browser session.
+### Priority 1 — Verify Resy deep link format ✅ (partial)
+Implemented Option A: `resy_slug` is now stored at add-time (faithful to the URL the user pasted) and used in `_resy_candidate()` instead of re-deriving from the display name.
 
-**Steps:**
-1. Add a real Resy restaurant to the watchlist via the dashboard URL resolver
-2. Click the **Test link** button on that restaurant card; observe what URL opens and whether it pre-fills date/party size correctly
-3. If the URL 404s or redirects to the homepage, investigate:
-   - Option A: Add a `resy_slug` TEXT column to the `restaurants` table and parse it from the URL in `lookup_venue.py`'s `parse_resy_url()` (returns slug in `path_parts[1]` already — just needs to be stored)
-   - Option B: Use `resy.com/cities/{city}/venues/{slug}` format (requires storing city too)
-4. Update `deep_links._resy_candidate()` with the confirmed format
+**What was done (2026-05-04):**
+- `lookup_venue.parse_resy_url()` now returns a 3-tuple `(venue_id, venue_name, slug)`
+- `/api/resolve-url` includes `resy_slug` in its response
+- `restaurants` table has a new `resy_slug TEXT` column (migrated via ALTER TABLE on startup)
+- `deep_links._resy_candidate()` prefers `venue["resy_slug"]` over `_to_slug(name)` fallback
+- Frontend captures and sends `resy_slug` when adding a restaurant
+
+**Still unverified:** The URL format `resy.com/venues/{slug}/{venue_id}?date=...&seats=...` has not been confirmed against a live browser session. If it 404s, consider Option B (store city and use `/cities/{city}/venues/{slug}` format).
 

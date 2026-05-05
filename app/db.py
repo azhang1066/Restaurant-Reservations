@@ -27,6 +27,7 @@ def init_db() -> sqlite3.Connection:
                 name TEXT NOT NULL,
                 source TEXT NOT NULL,
                 resy_venue_id TEXT,
+                resy_slug TEXT,
                 opentable_rid TEXT,
                 party_sizes TEXT NOT NULL,
                 days TEXT NOT NULL,
@@ -42,6 +43,10 @@ def init_db() -> sqlite3.Connection:
         # Add time_ranges column if it doesn't exist (for migration)
         try:
             conn.execute("ALTER TABLE restaurants ADD COLUMN time_ranges TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        try:
+            conn.execute("ALTER TABLE restaurants ADD COLUMN resy_slug TEXT")
         except sqlite3.OperationalError:
             pass  # Column already exists
         conn.execute(
@@ -106,6 +111,7 @@ def _row_to_restaurant(row: sqlite3.Row) -> Dict[str, Any]:
         "name": row["name"],
         "source": row["source"],
         "resy_venue_id": row["resy_venue_id"],
+        "resy_slug": row["resy_slug"] if row["resy_slug"] else "",
         "opentable_rid": row["opentable_rid"],
         "party_sizes": _deserialize_list(row["party_sizes"]),
         "days": _deserialize_list(row["days"]),
@@ -135,15 +141,16 @@ def add_restaurant(restaurant: Dict[str, Any]) -> int:
         cursor = conn.execute(
             """
             INSERT INTO restaurants (
-                name, source, resy_venue_id, opentable_rid,
+                name, source, resy_venue_id, resy_slug, opentable_rid,
                 party_sizes, days, time_earliest, time_latest, time_ranges,
                 enabled, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 restaurant["name"],
                 restaurant["source"],
                 restaurant.get("resy_venue_id"),
+                restaurant.get("resy_slug") or "",
                 restaurant.get("opentable_rid"),
                 _serialize_list(restaurant.get("party_sizes", [])),
                 _serialize_list(restaurant.get("days", [])),
@@ -168,6 +175,7 @@ def update_restaurant(restaurant_id: int, restaurant: Dict[str, Any]) -> bool:
                 name = ?,
                 source = ?,
                 resy_venue_id = ?,
+                resy_slug = ?,
                 opentable_rid = ?,
                 party_sizes = ?,
                 days = ?,
@@ -182,6 +190,7 @@ def update_restaurant(restaurant_id: int, restaurant: Dict[str, Any]) -> bool:
                 restaurant["name"],
                 restaurant["source"],
                 restaurant.get("resy_venue_id"),
+                restaurant.get("resy_slug") or "",
                 restaurant.get("opentable_rid"),
                 _serialize_list(restaurant.get("party_sizes", [])),
                 _serialize_list(restaurant.get("days", [])),

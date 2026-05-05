@@ -19,15 +19,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def parse_resy_url(url: str) -> tuple[str, str] | None:
+def parse_resy_url(url: str) -> tuple[str, str, str] | None:
     """
-    Parse a Resy URL to extract venue ID and name.
+    Parse a Resy URL to extract venue ID, display name, and raw slug.
 
     Args:
         url: Resy URL (e.g., https://resy.com/venues/venue-name/12345)
 
     Returns:
-        Tuple of (venue_id, venue_name) or None if parsing fails
+        Tuple of (venue_id, venue_name, slug) or None if parsing fails.
+        slug is the raw path segment as-is (e.g. "le-bernardin"), preserved
+        so deep links can use it without a lossy name→slug round-trip.
     """
     try:
         parsed = urlparse(url)
@@ -39,16 +41,16 @@ def parse_resy_url(url: str) -> tuple[str, str] | None:
 
         # Format: /venues/venue-name/venue-id
         if len(path_parts) >= 3 and path_parts[0] == "venues":
-            venue_name = path_parts[1]
+            slug = path_parts[1]
             venue_id = path_parts[2]
 
             # Check if venue_id is numeric
             if venue_id.isdigit():
-                return venue_id, venue_name.replace("-", " ").title()
+                return venue_id, slug.replace("-", " ").title(), slug
 
         # Format: /venues/venue-id (numeric ID only)
         elif len(path_parts) == 2 and path_parts[0] == "venues" and path_parts[1].isdigit():
-            return path_parts[1], "Unknown Venue"
+            return path_parts[1], "Unknown Venue", ""
 
         return None
     except Exception as e:
@@ -250,11 +252,12 @@ Examples:
     if args.resy_url:
         result = parse_resy_url(args.resy_url)
         if result:
-            venue_id, venue_name = result
+            venue_id, venue_name, slug = result
             print("🎯 Resy Venue Found:")
             print(f"   Name: {venue_name}")
             print(f"   Venue ID: {venue_id}")
-            print(f"   URL: https://resy.com/venues/{venue_name.lower().replace(' ', '-')}/{venue_id}")
+            print(f"   Slug: {slug}")
+            print(f"   URL: https://resy.com/venues/{slug}/{venue_id}")
         else:
             print("❌ Could not parse Resy URL. Expected format: https://resy.com/venues/venue-name/12345")
         return

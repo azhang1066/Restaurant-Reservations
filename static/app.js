@@ -80,6 +80,7 @@ function getSelectedDaysAndTimes(container) {
 }
 
 let addFormChipInput;
+let _resolvedResySlug = "";
 
 class ChipInput {
   constructor(container) {
@@ -385,9 +386,11 @@ async function resolveUrl() {
     elements.restaurantName.value = json.name || "";
     elements.resyId.value = json.resy_venue_id || "";
     elements.opentableId.value = json.opentable_rid || "";
+    _resolvedResySlug = json.resy_slug || "";
     handleSourceChange();
     showMessage(elements.resolveResult, "URL resolved. Review and add the restaurant.", "success");
   } else {
+    _resolvedResySlug = "";
     showMessage(elements.resolveResult, json.error || "Could not resolve URL.", "error");
   }
 }
@@ -407,6 +410,7 @@ async function submitRestaurantForm(event) {
     name: elements.restaurantName.value.trim(),
     source: elements.restaurantSource.value,
     resy_venue_id: elements.restaurantSource.value === "resy" ? elements.resyId.value.trim() : null,
+    resy_slug: elements.restaurantSource.value === "resy" ? _resolvedResySlug : "",
     opentable_rid: elements.restaurantSource.value === "opentable" ? elements.opentableId.value.trim() : null,
     party_sizes: addFormChipInput.getValues(),
     days: days,
@@ -439,6 +443,7 @@ async function submitRestaurantForm(event) {
   showMessage(elements.resolveResult, "Restaurant added successfully.", "success");
   elements.restaurantForm.reset();
   addFormChipInput.setValues([]);
+  _resolvedResySlug = "";
   buildDaysTimeGrid(elements.daysTimeGrid);
   handleSourceChange();
   loadRestaurants();

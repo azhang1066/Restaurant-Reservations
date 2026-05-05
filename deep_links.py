@@ -43,11 +43,12 @@ def _to_slug(name: str) -> str:
 
 def _resy_candidate(venue: dict, slot: dict) -> str:
     venue_id = venue.get("resy_venue_id", "")
-    name_slug = _to_slug(venue.get("name", "venue"))
+    # Prefer the slug stored at add-time (faithful to the original URL) over
+    # a slug re-derived from the display name (lossy for special chars/abbrevs).
+    slug = venue.get("resy_slug") or _to_slug(venue.get("name", "venue"))
     date = slot.get("date", "")
     party_size = slot.get("party_size", 2)
-    # Format matches lookup_venue.py's output: /venues/{slug}/{id}
-    return f"https://resy.com/venues/{name_slug}/{venue_id}?date={date}&seats={party_size}"
+    return f"https://resy.com/venues/{slug}/{venue_id}?date={date}&seats={party_size}"
 
 
 def _resy_fallback(venue: dict) -> str:
