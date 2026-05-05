@@ -121,3 +121,47 @@
 2026-05-01 23:48:43,250 - INFO - 127.0.0.1 - - [01/May/2026 23:48:43] "GET /api/logs HTTP/1.1" 200 -
 2026-05-01 23:49:12,933 - INFO - 127.0.0.1 - - [01/May/2026 23:49:12] "GET /api/logs HTTP/1.1" 200 -
 2026-05-01 23:49:43,239 - INFO - 127.0.0.1 - - [01/May/2026 23:49:43] "GET /api/logs HTTP/1.1" 200 -
+2026-05-04 20:51:21,206 - INFO - Restaurant Reservation Notifier started
+2026-05-04 20:51:21,208 - INFO - Running in scheduled mode (every 20 minutes)
+2026-05-04 20:51:21,208 - INFO - ==================================================
+2026-05-04 20:51:21,209 - INFO - Starting availability check
+2026-05-04 20:51:21,264 - INFO - Checking Nobu Malibu (resy) for Friday (2026-05-08)
+2026-05-04 20:51:21,266 - WARNING - Resy credentials not configured
+2026-05-04 20:51:23,229 - ERROR - HTTP error 419
+2026-05-04 20:51:23,241 - INFO - Checking Nobu Malibu (resy) for Saturday (2026-05-09)
+2026-05-04 20:51:23,241 - WARNING - Resy credentials not configured
+2026-05-04 20:51:24,833 - ERROR - HTTP error 419
+2026-05-04 20:51:24,836 - INFO - Availability check complete
+2026-05-04 20:51:24,837 - INFO - ==================================================
+2026-05-04 20:55:25,708 - INFO - Starting scheduler thread
+2026-05-04 20:55:25,709 - INFO - Starting availability check
+2026-05-04 20:55:25,742 - INFO - Checking Nobu Malibu (resy) for Friday (2026-05-08) size=2
+2026-05-04 20:55:25,805 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.156:5000
+2026-05-04 20:55:25,810 - WARNING - Resy credentials not configured
+2026-05-04 20:55:25,810 - INFO - [33mPress CTRL+C to quit[0m
+2026-05-04 20:55:27,498 - ERROR - HTTP error 419
+2026-05-04 20:55:27,526 - INFO - Checking Nobu Malibu (resy) for Saturday (2026-05-09) size=2
+2026-05-04 20:55:27,546 - WARNING - Resy credentials not configured
+2026-05-04 20:55:29,008 - ERROR - HTTP error 419
+2026-05-04 20:55:29,077 - INFO - Availability check complete
+2026-05-04 20:55:31,384 - INFO - 127.0.0.1 - - [04/May/2026 20:55:31] "GET / HTTP/1.1" 200 -
+2026-05-04 20:55:31,957 - INFO - 127.0.0.1 - - [04/May/2026 20:55:31] "GET /static/style.css HTTP/1.1" 200 -
+2026-05-04 20:55:32,190 - INFO - 127.0.0.1 - - [04/May/2026 20:55:32] "GET /static/app.js HTTP/1.1" 200 -
+2026-05-04 20:55:32,209 - INFO - 127.0.0.1 - - [04/May/2026 20:55:32] "GET /api/restaurants HTTP/1.1" 200 -
+2026-05-04 20:55:32,527 - INFO - 127.0.0.1 - - [04/May/2026 20:55:32] "GET /api/logs HTTP/1.1" 200 -
+2026-05-04 20:55:32,529 - INFO - 127.0.0.1 - - [04/May/2026 20:55:32] "GET /api/settings HTTP/1.1" 200 -
+2026-05-04 20:55:32,540 - INFO - 127.0.0.1 - - [04/May/2026 20:55:32] "GET /api/status HTTP/1.1" 200 -
+2026-05-04 20:56:03,496 - INFO - 127.0.0.1 - - [04/May/2026 20:56:03] "GET /api/logs HTTP/1.1" 200 -
+2026-05-04 20:56:03,498 - INFO - 127.0.0.1 - - [04/May/2026 20:56:03] "GET /api/status HTTP/1.1" 200 -
+2026-05-04 20:56:08,369 - INFO - 127.0.0.1 - - [04/May/2026 20:56:08] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
+2026-05-04 20:56:11,293 - INFO - 127.0.0.1 - - [04/May/2026 20:56:11] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
+2026-05-04 20:56:12,342 - INFO - 127.0.0.1 - - [04/May/2026 20:56:12] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
+2026-05-04 20:56:33,498 - INFO - 127.0.0.1 - - [04/May/2026 20:56:33] "GET /api/logs HTTP/1.1" 200 -
+2026-05-04 20:56:33,500 - INFO - 127.0.0.1 - - [04/May/2026 20:56:33] "GET /api/status HTTP/1.1" 200 -
+2026-05-04 20:56:52,979 - INFO - 127.0.0.1 - - [04/May/2026 20:56:52] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
+2026-05-04 20:56:59,541 - INFO - 127.0.0.1 - - [04/May/2026 20:56:59] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
+2026-05-04 20:57:02,225 - INFO - 127.0.0.1 - - [04/May/2026 20:57:02] "GET /api/logs HTTP/1.1" 200 -
+2026-05-04 20:57:02,540 - INFO - 127.0.0.1 - - [04/May/2026 20:57:02] "GET /api/status HTTP/1.1" 200 -
