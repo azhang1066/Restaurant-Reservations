@@ -98,33 +98,26 @@ Key architectural decisions:
 **Session date:** 2026-05-05
 
 ### Resy location_id auto-discovery (Priority 2)
-- `_auto_discover_location_id(slug, city)` — brute-probes IDs 1–30 on `/3/venue`, caches hit in `_LOCATION_IDS`, logs paste-ready hint
-- `_lookup_by_search` fires discovery in daemon thread after first successful coordinate-based lookup for a city
-- `discover_all_location_ids()` batch method + `python main.py --discover-locations` CLI flag
-
-### Resy & OpenTable URL parsing
-- `parse_resy_url()` updated to 4-tuple; correctly parses current `/cities/{city}/venues/{slug}` format
-- `parse_opentable_url()` updated to 3-tuple; correctly parses current `/r/{slug}` format (no numeric ID)
-- Both parsers preserve the raw slug to avoid lossy name→slug round-trips
-
-### Deep link URL format corrections
-- **Resy**: corrected from `/venues/{slug}/{venue_id}` to `/cities/{city}/venues/{slug}?date=...&seats=...`
-- **OpenTable**: corrected from `/r/{rid}?...` to `/r/{slug}?covers=...&dateTime=...`
-- `resy_slug`, `resy_city`, `opentable_slug` columns added to `restaurants` table (ALTER TABLE migrations); all CRUD wired through; frontend captures and sends all three at add-time
-
-### Resy venue ID auto-lookup
-- `ResyAPIClient.get_venue_id_from_slug(slug, city)` added to `resy_api.py`
-- Primary path: `GET /3/venue?location_id={id}&url_slug={slug}` (confirmed `new-york-ny → 1`)
-- Fallback path: coordinate-based search via `GET /3/search`, matches by `url_slug`
-- Wired into `/api/resolve-url` — pasting a Resy URL auto-populates venue ID if credentials are set
-
-### Dashboard UX (Stage 7)
-- Check Now button with overlap protection
-- Scheduler status pill (last check / next check)
+- `_auto_discover_location_id(slug, city)` — probes location_ids 1–30 on `/3/venue`, updates `_LOCATION_IDS` in-place, logs paste-ready hint for permanent storage
+- `_lookup_by_search` now accepts `city`; kicks off `_auto_discover_location_id` in a daemon thread after the first successful coordinate-based lookup for an unmapped city
+- `discover_all_location_ids()` — batch discovers every city in `_CITY_COORDS`; logs a full paste-ready `_LOCATION_IDS` block
+- CLI: `python main.py --discover-locations` (requires valid credentials; Resy auth token expires periodically)
+- README updated with new CLI flag and a "Resy City Location IDs" section
 
 ---
 
 ## Previous Sessions
+
+**Session date:** 2026-05-04
+
+- `parse_resy_url()` updated to 4-tuple; correctly parses current `/cities/{city}/venues/{slug}` format
+- `parse_opentable_url()` updated to 3-tuple; correctly parses current `/r/{slug}` format (no numeric ID)
+- Resy deep link corrected to `/cities/{city}/venues/{slug}?date=...&seats=...`
+- OpenTable deep link corrected to `/r/{slug}?covers=...&dateTime=...`
+- `resy_slug`, `resy_city`, `opentable_slug` columns added to `restaurants` table; CRUD and frontend wired through
+- `ResyAPIClient.get_venue_id_from_slug(slug, city)` with primary (location_id) + fallback (coordinate search) strategies
+- `/api/resolve-url` auto-populates venue ID when credentials are set
+- Check Now button with overlap protection; scheduler status pill (last/next check)
 
 **Session date:** 2026-05-02
 
@@ -144,19 +137,13 @@ Key architectural decisions:
 ### Priority 1 — Availability count badge (Stage 7)
 Add a small badge to each watchlist card showing the number of available slots found in the last check. Requires storing the latest slot count per restaurant (e.g. a `last_slot_count` column or in-memory dict) and surfacing it via the `/api/restaurants` response.
 
-### Priority 2 — Expand Resy location_id mapping ✅
-Auto-discovery built into `resy_api.py`:
-- `_auto_discover_location_id(slug, city)` — probes location_ids 1–30 on `/3/venue`, updates `_LOCATION_IDS` in-place, logs a paste-ready hint for permanent storage
-- `_lookup_by_search` now accepts `city` and kicks off `_auto_discover_location_id` in a daemon thread after a successful coordinate-based lookup
-- `discover_all_location_ids()` — batch discovers every city in `_CITY_COORDS`; logs a full paste-ready `_LOCATION_IDS` block
-- CLI: `python main.py --discover-locations` (refresh Resy credentials first; auth token expires)
-
-### Priority 3 — End-to-end live test
+### Priority 2 — End-to-end live test
 Run a full check cycle with a real Resy and OpenTable restaurant; verify:
 - Availability API returns slots
 - Deep links open the correct pre-filled booking page
 - Push notifications fire and the tap target URL is correct
 - Deduplication suppresses repeat notifications correctly
+- Run `--discover-locations` with fresh credentials to populate `_LOCATION_IDS`
 
-### Priority 4 — Unit tests
+### Priority 3 — Unit tests
 Add tests for `deep_links.py` (URL construction, fallback logic) and `notifiers/` (send payloads).

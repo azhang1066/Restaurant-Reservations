@@ -45,10 +45,10 @@ static/
   app.js         All frontend logic (no framework)
   style.css      Dark theme
 deep_links.py    Booking URL builder with HEAD validation + CLI
-resy_api.py      ResyAPIClient (availability + venue ID lookup), OpenTableAPIClient
+resy_api.py      ResyAPIClient (availability, venue ID lookup, location_id auto-discovery)
 lookup_venue.py  URL parser for Resy and OpenTable restaurant URLs
 restaurants.py   Static config (legacy; superseded by SQLite)
-main.py          CLI entry point (--test, --test-notify)
+main.py          CLI entry point (--test, --test-notify, --discover-locations)
 ```
 
 ## Requirements
@@ -209,6 +209,9 @@ python main.py --test
 # Send a test push notification and exit
 python main.py --test-notify
 
+# Discover Resy location_ids for all supported cities (requires valid credentials)
+python main.py --discover-locations
+
 # Parse venue details from a URL
 python lookup_venue.py --resy-url "https://resy.com/cities/new-york-ny/venues/j-bespoke"
 python lookup_venue.py --opentable-url "https://www.opentable.com/r/soothr-new-york"
@@ -226,6 +229,16 @@ The dashboard URL resolver handles this automatically. If you need IDs manually:
 2. Find the request to `api.resy.com/3/venue?...` — the `id` in the response is the venue ID
 
 **OpenTable:** The restaurant slug is in the URL path (`/r/{slug}`). The numeric ID (if needed for the monitoring API) appears in requests to `platform.opentable.com`.
+
+## Resy City Location IDs
+
+Resy's venue lookup API requires a numeric `location_id` for the city. `new-york-ny` is hardcoded as `1`; other cities use a coordinate-based search fallback. To promote a city to the faster primary path:
+
+1. Ensure valid Resy credentials are set in `.env`
+2. Run `python main.py --discover-locations`
+3. The log prints a ready-to-paste `_LOCATION_IDS` block — copy it into `resy_api.py`
+
+Auto-discovery also runs automatically in the background the first time any venue in an unmapped city is looked up. The discovered ID is cached for the lifetime of the process and logged so you can make it permanent.
 
 ## Logs
 
