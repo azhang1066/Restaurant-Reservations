@@ -499,6 +499,24 @@ async function loadStatus() {
   pill.textContent = text;
 }
 
+async function checkNow() {
+  const btn = document.getElementById("check-now-btn");
+  btn.disabled = true;
+  btn.textContent = "Checking…";
+  const response = await fetch("/api/check-now", { method: "POST" });
+  const json = await response.json();
+  if (!response.ok) {
+    btn.disabled = false;
+    btn.textContent = "Check Now";
+    return;
+  }
+  setTimeout(async () => {
+    await Promise.all([loadLogs(), loadStatus()]);
+    btn.disabled = false;
+    btn.textContent = "Check Now";
+  }, 3000);
+}
+
 async function initialize() {
   buildDaysTimeGrid(elements.daysTimeGrid);
   addFormChipInput = new ChipInput(elements.partySizesChips);
@@ -520,6 +538,7 @@ async function initialize() {
     if (topic) navigator.clipboard.writeText(`https://ntfy.sh/${topic}`);
   });
   document.getElementById("test-notification").addEventListener("click", testNotification);
+  document.getElementById("check-now-btn").addEventListener("click", checkNow);
 
   setInterval(loadLogs, 30000);
   setInterval(loadStatus, 30000);

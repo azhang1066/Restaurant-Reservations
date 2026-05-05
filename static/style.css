@@ -45,6 +45,12 @@ body {
   color: #9ca3af;
 }
 
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .status-pill {
   display: inline-flex;
   padding: 10px 14px;

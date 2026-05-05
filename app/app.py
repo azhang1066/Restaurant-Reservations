@@ -2,6 +2,7 @@ import json
 import os
 import random
 import string
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -256,6 +257,15 @@ def restaurant_deep_link(restaurant_id: int):
     slot = {"date": date, "time": time_str, "party_size": party_size}
     urls = build_booking_url(restaurant["source"], restaurant, slot)
     return jsonify(urls)
+
+
+@app.route("/api/check-now", methods=["POST"])
+def check_now():
+    if _notifier._check_running:
+        return jsonify({"success": False, "message": "A check is already in progress."}), 409
+    thread = threading.Thread(target=_notifier.run_check, daemon=True)
+    thread.start()
+    return jsonify({"success": True, "message": "Check started."})
 
 
 @app.route("/api/status", methods=["GET"])

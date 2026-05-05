@@ -186,6 +186,7 @@ The dashboard includes:
 - live activity log with availability events and **Book Now →** deep links
 - push and email notification configuration
 - scheduler status pill — shows time since last check and minutes until the next one (updates every 30 s)
+- **Check Now** button — triggers an immediate availability check without waiting for the scheduler; shows "Checking…" and refreshes the log and status pill when done
 
 ## Deep Link Booking URLs
 

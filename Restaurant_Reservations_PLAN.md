@@ -79,7 +79,7 @@ Key architectural decisions:
 - Fix dashboard status pill (currently stuck on "Loading…")
 
 ### Stage 7 — Dashboard UX Polish 🔲
-- "Check Now" button to trigger an immediate availability run from the UI
+- ~~"Check Now" button to trigger an immediate availability run from the UI~~ ✅
 - ~~Log auto-pruning (keep last 500 entries)~~ ✅
 - ~~Scheduler status indicator (last check time, next check time)~~ ✅
 - Availability count badge on watchlist cards
@@ -99,6 +99,13 @@ Key architectural decisions:
 ## Completed This Session
 
 **Session date:** 2026-05-04
+
+### "Check Now" button (Stage 7 / Priority 2)
+- Added `_check_running: bool` flag to `app/notifier.py`; `run_check()` returns early if already running and clears the flag in a `finally`-equivalent block after completion — prevents overlapping runs from the scheduler and a manual trigger
+- Added `POST /api/check-now` endpoint in `app/app.py`; returns 409 if a check is already in progress, otherwise spawns a daemon thread calling `run_check()` and returns immediately
+- Added `checkNow()` in `static/app.js`: POSTs to `/api/check-now`, disables the button and shows "Checking…", then after 3 s refreshes the activity log and status pill and re-enables the button
+- Added **Check Now** button to the dashboard header in `templates/index.html`, grouped with the status pill in a `.header-controls` flex container
+- Added `.header-controls` flex style to `static/style.css`
 
 ### Scheduler status pill (Stage 7 / Priority 2)
 - Added `last_check_time: datetime | None` module-level variable to `app/notifier.py`; set to `datetime.now(timezone.utc)` at the end of every `run_check()` call
@@ -171,10 +178,3 @@ The Resy URL `resy.com/venues/{slug}/{venue_id}?date=...&seats=...` is reverse-e
    - Option B: Use `resy.com/cities/{city}/venues/{slug}` format (requires storing city too)
 4. Update `deep_links._resy_candidate()` with the confirmed format
 
-### Priority 2 — "Check Now" button
-Allow triggering an immediate availability check from the dashboard without waiting for the scheduler interval.
-
-**Steps:**
-1. Add `POST /api/check-now` endpoint in `app/app.py` that calls `run_check()` in a background thread (to avoid blocking the HTTP response)
-2. Add a **Check Now** button to the dashboard header in `templates/index.html`
-3. Wire it in `static/app.js`: POST to `/api/check-now`, show a brief "Checking…" state, then refresh logs and status after 3 s

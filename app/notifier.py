@@ -24,6 +24,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 last_check_time: datetime | None = None
+_check_running: bool = False
 
 
 def check_restaurant(restaurant: dict) -> None:
@@ -145,7 +146,11 @@ def check_restaurant(restaurant: dict) -> None:
 
 
 def run_check() -> None:
-    global last_check_time
+    global last_check_time, _check_running
+    if _check_running:
+        logger.info("Check already in progress — skipping")
+        return
+    _check_running = True
 
     logger.info("Starting availability check")
     db.add_activity_log("Starting availability check", "info")
@@ -169,6 +174,7 @@ def run_check() -> None:
     logger.info("Availability check complete")
     db.add_activity_log("Availability check complete", "info")
     last_check_time = datetime.now(timezone.utc)
+    _check_running = False
 
 
 def start_scheduler() -> None:
