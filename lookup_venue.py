@@ -65,15 +65,17 @@ def parse_resy_url(url: str) -> tuple[str, str, str, str] | None:
         return None
 
 
-def parse_opentable_url(url: str) -> tuple[str, str] | None:
+def parse_opentable_url(url: str) -> tuple[str, str, str] | None:
     """
-    Parse an OpenTable URL to extract restaurant ID and name.
-
-    Args:
-        url: OpenTable URL (e.g., https://opentable.com/r/restaurant-name/r12345)
+    Parse an OpenTable URL to extract restaurant ID, display name, and slug.
 
     Returns:
-        Tuple of (restaurant_id, restaurant_name) or None if parsing fails
+        Tuple of (restaurant_id, restaurant_name, slug) or None if parsing fails.
+        restaurant_id may be "" for current-format URLs that don't include a numeric ID.
+
+    Supported formats:
+        /r/{slug}               ← current OpenTable format
+        /r/{slug}/r{id}         ← older format with numeric ID
     """
     try:
         parsed = urlparse(url)
@@ -82,15 +84,21 @@ def parse_opentable_url(url: str) -> tuple[str, str] | None:
 
         path_parts = parsed.path.strip("/").split("/")
 
-        # Format: /r/restaurant-name/r12345
-        if len(path_parts) >= 3 and path_parts[0] == "r":
-            restaurant_name = path_parts[1].replace("-", " ").title()
+        if not path_parts or path_parts[0] != "r":
+            return None
 
-            # Last part should be the ID (r12345)
+        # Current format: /r/{slug}  (two parts, no numeric ID)
+        if len(path_parts) == 2:
+            slug = path_parts[1]
+            return "", slug.replace("-", " ").title(), slug
+
+        # Older format: /r/{slug}/r{numeric-id}
+        if len(path_parts) >= 3:
+            slug = path_parts[1]
             last_part = path_parts[-1]
             if last_part.startswith("r") and last_part[1:].isdigit():
-                restaurant_id = last_part[1:]  # Remove 'r' prefix
-                return restaurant_id, restaurant_name
+                restaurant_id = last_part[1:]
+                return restaurant_id, slug.replace("-", " ").title(), slug
 
         return None
     except Exception as e:
@@ -275,11 +283,13 @@ Examples:
     if args.opentable_url:
         result = parse_opentable_url(args.opentable_url)
         if result:
-            restaurant_id, restaurant_name = result
+            restaurant_id, restaurant_name, slug = result
             print("🍽️  OpenTable Restaurant Found:")
             print(f"   Name: {restaurant_name}")
-            print(f"   Restaurant ID: {restaurant_id}")
-            print(f"   URL: https://opentable.com/r/{restaurant_name.lower().replace(' ', '-')}/r{restaurant_id}")
+            if restaurant_id:
+                print(f"   Restaurant ID: {restaurant_id}")
+            print(f"   Slug: {slug}")
+            print(f"   URL: https://www.opentable.com/r/{slug}")
         else:
             print("❌ Could not parse OpenTable URL. Expected format: https://opentable.com/r/restaurant-name/r12345")
         return

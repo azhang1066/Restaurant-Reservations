@@ -193,3 +193,49 @@
 2026-05-04 21:05:16,277 - INFO - 127.0.0.1 - - [04/May/2026 21:05:16] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
 2026-05-04 21:05:16,544 - INFO - 127.0.0.1 - - [04/May/2026 21:05:16] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
 2026-05-04 21:05:20,485 - INFO - 127.0.0.1 - - [04/May/2026 21:05:20] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -
+2026-05-04 21:13:02,882 - INFO - Starting scheduler thread
+2026-05-04 21:13:02,883 - INFO - Starting availability check
+2026-05-04 21:13:02,904 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.156:5000
+2026-05-04 21:13:02,906 - INFO - [33mPress CTRL+C to quit[0m
+2026-05-04 21:13:02,913 - INFO - Checking Nobu Malibu (resy) for Friday (2026-05-08) size=2
+2026-05-04 21:13:02,938 - WARNING - Resy credentials not configured
+2026-05-04 21:13:03,910 - INFO - 127.0.0.1 - - [04/May/2026 21:13:03] "GET /api/logs HTTP/1.1" 200 -
+2026-05-04 21:13:03,911 - INFO - 127.0.0.1 - - [04/May/2026 21:13:03] "GET /api/status HTTP/1.1" 200 -
+2026-05-04 21:13:04,441 - ERROR - HTTP error 419
+2026-05-04 21:13:04,482 - INFO - Checking Nobu Malibu (resy) for Saturday (2026-05-09) size=2
+2026-05-04 21:13:04,496 - WARNING - Resy credentials not configured
+2026-05-04 21:13:05,415 - ERROR - HTTP error 419
+2026-05-04 21:13:05,441 - INFO - Availability check complete
+2026-05-04 21:13:11,712 - INFO - 127.0.0.1 - - [04/May/2026 21:13:11] "GET / HTTP/1.1" 200 -
+2026-05-04 21:13:12,563 - INFO - 127.0.0.1 - - [04/May/2026 21:13:12] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+2026-05-04 21:13:12,634 - INFO - 127.0.0.1 - - [04/May/2026 21:13:12] "GET /static/app.js HTTP/1.1" 200 -
+2026-05-04 21:13:12,654 - INFO - 127.0.0.1 - - [04/May/2026 21:13:12] "GET /api/restaurants HTTP/1.1" 200 -
+2026-05-04 21:13:12,961 - INFO - 127.0.0.1 - - [04/May/2026 21:13:12] "GET /api/settings HTTP/1.1" 200 -
+2026-05-04 21:13:12,966 - INFO - 127.0.0.1 - - [04/May/2026 21:13:12] "GET /api/logs HTTP/1.1" 200 -
+2026-05-04 21:13:12,974 - INFO - 127.0.0.1 - - [04/May/2026 21:13:12] "GET /api/status HTTP/1.1" 200 -
+2026-05-04 21:13:15,339 - INFO - 127.0.0.1 - - [04/May/2026 21:13:15] "POST /api/resolve-url HTTP/1.1" 200 -
+2026-05-04 21:13:47,578 - INFO - Starting scheduler thread
+2026-05-04 21:13:47,578 - INFO - Starting availability check
+2026-05-04 21:13:47,615 - INFO - Checking Nobu Malibu (resy) for Friday (2026-05-08) size=2
+2026-05-04 21:13:47,641 - WARNING - Resy credentials not configured
+2026-05-04 21:13:47,643 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.156:5000
+2026-05-04 21:13:47,645 - INFO - [33mPress CTRL+C to quit[0m
+2026-05-04 21:13:49,438 - ERROR - HTTP error 419
+2026-05-04 21:13:49,491 - INFO - Checking Nobu Malibu (resy) for Saturday (2026-05-09) size=2
+2026-05-04 21:13:49,514 - WARNING - Resy credentials not configured
+2026-05-04 21:13:50,225 - INFO - 127.0.0.1 - - [04/May/2026 21:13:50] "GET / HTTP/1.1" 200 -
+2026-05-04 21:13:50,828 - INFO - 127.0.0.1 - - [04/May/2026 21:13:50] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+2026-05-04 21:13:51,042 - INFO - 127.0.0.1 - - [04/May/2026 21:13:51] "[36mGET /static/app.js HTTP/1.1[0m" 304 -
+2026-05-04 21:13:51,054 - INFO - 127.0.0.1 - - [04/May/2026 21:13:51] "GET /api/restaurants HTTP/1.1" 200 -
+2026-05-04 21:13:51,372 - INFO - 127.0.0.1 - - [04/May/2026 21:13:51] "GET /api/settings HTTP/1.1" 200 -
+2026-05-04 21:13:51,375 - INFO - 127.0.0.1 - - [04/May/2026 21:13:51] "GET /api/logs HTTP/1.1" 200 -
+2026-05-04 21:13:51,380 - INFO - 127.0.0.1 - - [04/May/2026 21:13:51] "GET /api/status HTTP/1.1" 200 -
+2026-05-04 21:13:51,573 - ERROR - HTTP error 419
+2026-05-04 21:13:51,662 - INFO - Availability check complete
+2026-05-04 21:13:57,572 - INFO - 127.0.0.1 - - [04/May/2026 21:13:57] "[31m[1mPOST /api/resolve-url HTTP/1.1[0m" 400 -

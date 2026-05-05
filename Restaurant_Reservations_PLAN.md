@@ -100,6 +100,13 @@ Key architectural decisions:
 
 **Session date:** 2026-05-04
 
+### OpenTable URL parsing and deep link fixed
+- `lookup_venue.parse_opentable_url()` now returns a 3-tuple `(restaurant_id, restaurant_name, slug)`; handles `/r/{slug}` (current format, no numeric ID) and `/r/{slug}/r{id}` (older format)
+- `/api/resolve-url` returns `opentable_slug` in its response
+- `restaurants` table: added `opentable_slug TEXT` column with ALTER TABLE migration; all CRUD wired through
+- `deep_links._opentable_candidate/fallback()`: prefers `opentable_slug` over `opentable_rid` for the web URL; returns `""` if neither present
+- `static/app.js`: `_resolvedOpentableSlug` captured from resolve response; sent in create payload; cleared on form reset; form validation relaxed to accept slug in lieu of numeric restaurant ID
+
 ### Resy deep link format fixed (Priority 1) ✅
 Confirmed URL format from live example: `resy.com/cities/{city}/venues/{slug}?date=YYYY-MM-DD&seats=N`
 

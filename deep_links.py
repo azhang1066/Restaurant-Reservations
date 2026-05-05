@@ -64,18 +64,22 @@ def _resy_fallback(venue: dict) -> str:
 
 
 def _opentable_candidate(venue: dict, slot: dict) -> str:
-    rid = venue.get("opentable_rid", "")
+    # Prefer stored slug (faithful to URL) over numeric rid for the web URL
+    slug = venue.get("opentable_slug") or venue.get("opentable_rid", "")
     date = slot.get("date", "")
     time_str = slot.get("time", "")
     party_size = slot.get("party_size", 2)
-    # dateTime accepts YYYY-MM-DDTHH:MM; OpenTable's SPA resolves rid in path
+    if not slug:
+        return ""
     dt = f"{date}T{time_str}" if time_str else date
-    return f"https://www.opentable.com/r/{rid}?covers={party_size}&dateTime={dt}"
+    return f"https://www.opentable.com/r/{slug}?covers={party_size}&dateTime={dt}"
 
 
 def _opentable_fallback(venue: dict) -> str:
-    rid = venue.get("opentable_rid", "")
-    return f"https://www.opentable.com/r/{rid}"
+    slug = venue.get("opentable_slug") or venue.get("opentable_rid", "")
+    if slug:
+        return f"https://www.opentable.com/r/{slug}"
+    return "https://www.opentable.com"
 
 
 # ---------------------------------------------------------------------------
