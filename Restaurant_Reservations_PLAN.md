@@ -20,8 +20,8 @@ The project is built as a single Python package (`app/`) with a Flask web server
 
 Key architectural decisions:
 - **SQLite only** — no external database; `restaurants.db` holds all state
-- **Notification deduplication** via a `notified_slots` table (not a JSON file); re-notifies if a slot disappears and reappears
-- **Deep links** built in `deep_links.py`, validated with a 2-second HEAD request before sending, falling back to homepage if unreachable
+- **Notification deduplication** via a `notified_slots` table; re-notifies if a slot disappears and reappears
+- **Deep links** built in `deep_links.py`, validated with a 2-second HEAD request before sending, falling back to venue homepage if unreachable
 - **Provider abstraction** — `NOTIFY_PROVIDER=ntfy|pushover` env var selects the active push implementation with zero code changes
 - **Settings in `.env`** — all credentials/toggles written by the dashboard UI to `.env` via `_save_env()`
 
@@ -36,7 +36,7 @@ Key architectural decisions:
 - `lookup_venue.py` — Resy/OpenTable URL parser + name-based venue search
 
 ### Stage 2 — Flask Dashboard ✅
-- `app/app.py` — REST API (restaurants CRUD, settings, logs, resolve-url, deep-link, test-notification)
+- `app/app.py` — REST API (restaurants CRUD, settings, logs, resolve-url, deep-link, test-notification, check-now, status)
 - `app/db.py` — SQLite layer: `restaurants`, `activity_log`, `notified_slots` tables
 - `app/notifier.py` — background scheduler, `check_restaurant()`, per-slot push + batch email
 - `templates/index.html` — 4-panel dashboard: Add Restaurant / Watchlist / Activity Log / Notification Settings
@@ -55,44 +55,41 @@ Key architectural decisions:
 - `notified_slots` SQLite table: `(venue_id, date, time, party_size)` composite PK
 - `has_notified_slot()`, `add_notified_slot()`, `remove_stale_notified_slots()` in `db.py`
 - Stale removal: slots no longer in the API response are evicted → re-notified if they return
-- Replaced `seen_slots.json` file tracking and deleted the file; CLI `main.py` path now uses the same SQLite table as the Flask scheduler
+- Replaced `seen_slots.json` file tracking; CLI `main.py` and Flask scheduler share the same SQLite table
 - Log states: ✅ sent · 🔁 skipped · 🔍 nothing found · ❌ failed
 
 ### Stage 5 — Deep Link Booking URLs ✅
 - `deep_links.py` — `build_booking_url(platform, venue, slot) → {web_url, app_url, fallback_url}`
-- HEAD validation (2 s timeout) on every candidate URL; falls back to restaurant homepage on failure/timeout
-- Resy format: `resy.com/venues/{slug}/{venue_id}?date=YYYY-MM-DD&seats=N` (slug derived from restaurant name)
-- OpenTable format: `opentable.com/r/{rid}?covers=N&dateTime=YYYY-MM-DDTHH:MM`
+- HEAD validation (2 s timeout) on every candidate URL; falls back to venue homepage on failure/timeout
+- Confirmed URL formats:
+  - Resy: `resy.com/cities/{city}/venues/{slug}?date=YYYY-MM-DD&seats=N`
+  - OpenTable: `opentable.com/r/{slug}?covers=N&dateTime=YYYY-MM-DDTHH:MM`
+- `resy_slug`, `resy_city`, `opentable_slug` stored in the `restaurants` table so deep links are faithful to the original URL
 - No public native app scheme found for either platform; `app_url == web_url`
-- ntfy: `Click` header = `web_url`; `Actions` header would add "Open App" if `app_url` ever differs
-- Pushover: `url` = `web_url`, `url_title` = "Book Now"
+- ntfy: `Click` header = `web_url`; Pushover: `url` = `web_url`, `url_title` = "Book Now"
 - Activity log entries with a URL show a **Book Now →** pill link in the dashboard
 - Each watchlist card has a **Test link** button → calls `/api/restaurants/{id}/deep-link` and opens in new tab
-- CLI: `python deep_links.py --platform resy --venue-id 12345 --venue-name "Carbone" --date 2026-05-09 --time 20:00 --party-size 2`
+- CLI: `python deep_links.py --platform resy --venue-slug j-bespoke --venue-city new-york-ny --date 2026-05-09 --time 20:00 --party-size 2`
 
-### Stage 6 — End-to-End Testing & Hardening 🔲
-- Live test with a real Resy and OpenTable restaurant
-- Verify Resy deep link format resolves correctly (the slug-based URL is reverse-engineered)
-- Consider storing `resy_url` or `resy_slug` in the restaurant record if HEAD validation falls back too often
-- Add unit tests for `deep_links.py` and `notifiers/`
-- ~~Prune old `seen_slots.json` reference / delete the file~~ ✅
-- Fix dashboard status pill (currently stuck on "Loading…")
+### Stage 6 — URL Resolution & Venue ID Lookup ✅
+- `lookup_venue.parse_resy_url()` returns 4-tuple `(venue_id, venue_name, slug, city)`; handles `/cities/{city}/venues/{slug}` (current), `/venues/{slug}/{id}` (old), `/venues/{id}` (legacy)
+- `lookup_venue.parse_opentable_url()` returns 3-tuple `(restaurant_id, restaurant_name, slug)`; handles `/r/{slug}` (current) and `/r/{slug}/r{id}` (old)
+- `ResyAPIClient.get_venue_id_from_slug(slug, city)` — two-strategy lookup:
+  - **Primary**: `GET /3/venue?location_id={id}&url_slug={slug}` using `_LOCATION_IDS` dict (confirmed: `new-york-ny → 1`)
+  - **Fallback**: `GET /3/search` with lat/lng coordinates, matching by `url_slug`; `_CITY_COORDS` covers 15 common cities
+- `resolve_url` endpoint auto-fetches venue ID when Resy credentials are configured; result auto-populates the dashboard form
 
-### Stage 7 — Dashboard UX Polish 🔲
-- ~~"Check Now" button to trigger an immediate availability run from the UI~~ ✅
-- ~~Log auto-pruning (keep last 500 entries)~~ ✅
-- ~~Scheduler status indicator (last check time, next check time)~~ ✅
-- Availability count badge on watchlist cards
-- *Design note: consult a design-focused tool for layout/visual decisions before building*
+### Stage 7 — Dashboard UX Polish ✅
+- "Check Now" button — triggers immediate check from UI; shows "Checking…"; prevents overlapping runs with `_check_running` flag
+- Scheduler status pill — shows time since last check and minutes until next; updates every 30 s
+- Activity log auto-pruned to 500 entries
+- Availability count badge on watchlist cards 🔲
 
 ### Stage 8 — Multi-Party-Size Support ✅
-- `party_sizes TEXT` column already existed in the DB schema (JSON array, e.g. `"[4, 2]"`); backward compat via `_row_to_restaurant` fallback was already in place
-- `app/notifier.py` — Added `notified_this_run: set` (scoped per `check_restaurant()` call) to deduplicate across sizes: if a slot's `(date, time)` fires for size 4, size 2 skips it with a "larger party already notified" debug log. Email batch now uses `actually_notified` instead of all `new_slots`.
-- `app/app.py` — Added `_validate_party_sizes()` helper; both POST and PUT endpoints return 400 if `party_sizes` is empty, non-list, or contains values outside 1–20
-- `notifiers/base.py` — Notification body updated to "Table for N" (was "N guests")
-- `static/app.js` — Replaced `normalizePartySizes` text-input approach with a `ChipInput` class; chips show ordinal labels (1st/2nd/3rd), up/down reorder buttons disabled at boundaries, × remove; add form and every card edit panel use the class; form reset calls `setValues([])`
-- `templates/index.html` — Party sizes text input replaced with `<div id="party-sizes-chips" class="chip-input-container">`
-- `static/style.css` — Added chip styles (`.chip-input-container`, `.chip`, `.chip-ordinal`, `.chip-value`, `.chip-btn`, `.chip-input-wrap`, `.chip-text-input`)
+- `party_sizes TEXT` column (JSON array, e.g. `"[4, 2]"`); backward compat via `_row_to_restaurant` fallback
+- Cross-size deduplication in `app/notifier.py`: `notified_this_run` set prevents duplicate notifications for the same slot across sizes in one check run
+- API validation: `party_sizes` must be a non-empty list of integers 1–20
+- Chip-style party size UI: ordinal labels (1st/2nd/3rd), ↑/↓ reorder, × remove
 
 ---
 
@@ -100,99 +97,57 @@ Key architectural decisions:
 
 **Session date:** 2026-05-04
 
-### Resy venue ID auto-lookup from slug (2026-05-04)
-- `ResyAPIClient.get_venue_id_from_slug(slug, city)` in `resy_api.py`: two-strategy lookup:
-  - **Primary**: `GET /3/venue?location_id={id}&url_slug={slug}` — requires a known `location_id` for the city (confirmed: `new-york-ny → 1`); stored in `_LOCATION_IDS` dict
-  - **Fallback**: `GET /3/search?query={name}&lat={lat}&lng={lng}` — for cities not yet in `_LOCATION_IDS`, searches by name and matches by `url_slug`; coords stored in `_CITY_COORDS` for 15 common cities
-  - ID extraction handled by `_extract_venue_id()`, covers both flat `id` and nested `id.resy` response shapes
-- `resolve_url` in `app/app.py` calls this after parsing a new-format Resy URL; result auto-populates the venue ID field in the dashboard; falls back silently if credentials absent
-- **To add a new city**: test its slug+URL, confirm the returned `location_id`, add to `_LOCATION_IDS`
+### Resy & OpenTable URL parsing
+- `parse_resy_url()` updated to 4-tuple; correctly parses current `/cities/{city}/venues/{slug}` format
+- `parse_opentable_url()` updated to 3-tuple; correctly parses current `/r/{slug}` format (no numeric ID)
+- Both parsers preserve the raw slug to avoid lossy name→slug round-trips
 
-### OpenTable URL parsing and deep link fixed
-- `lookup_venue.parse_opentable_url()` now returns a 3-tuple `(restaurant_id, restaurant_name, slug)`; handles `/r/{slug}` (current format, no numeric ID) and `/r/{slug}/r{id}` (older format)
-- `/api/resolve-url` returns `opentable_slug` in its response
-- `restaurants` table: added `opentable_slug TEXT` column with ALTER TABLE migration; all CRUD wired through
-- `deep_links._opentable_candidate/fallback()`: prefers `opentable_slug` over `opentable_rid` for the web URL; returns `""` if neither present
-- `static/app.js`: `_resolvedOpentableSlug` captured from resolve response; sent in create payload; cleared on form reset; form validation relaxed to accept slug in lieu of numeric restaurant ID
+### Deep link URL format corrections
+- **Resy**: corrected from `/venues/{slug}/{venue_id}` to `/cities/{city}/venues/{slug}?date=...&seats=...`
+- **OpenTable**: corrected from `/r/{rid}?...` to `/r/{slug}?covers=...&dateTime=...`
+- `resy_slug`, `resy_city`, `opentable_slug` columns added to `restaurants` table (ALTER TABLE migrations); all CRUD wired through; frontend captures and sends all three at add-time
 
-### Resy deep link format fixed (Priority 1) ✅
-Confirmed URL format from live example: `resy.com/cities/{city}/venues/{slug}?date=YYYY-MM-DD&seats=N`
+### Resy venue ID auto-lookup
+- `ResyAPIClient.get_venue_id_from_slug(slug, city)` added to `resy_api.py`
+- Primary path: `GET /3/venue?location_id={id}&url_slug={slug}` (confirmed `new-york-ny → 1`)
+- Fallback path: coordinate-based search via `GET /3/search`, matches by `url_slug`
+- Wired into `/api/resolve-url` — pasting a Resy URL auto-populates venue ID if credentials are set
 
-- `lookup_venue.parse_resy_url()` now returns a 4-tuple `(venue_id, venue_name, slug, city)`; handles `/cities/{city}/venues/{slug}` (current), `/venues/{slug}/{id}` (old), and `/venues/{id}` (legacy)
-- `/api/resolve-url` returns `resy_slug` and `resy_city` in its response
-- `restaurants` table: added `resy_slug TEXT` and `resy_city TEXT` columns with ALTER TABLE migration in `app/db.py`; all CRUD wired through
-- `deep_links._resy_candidate()`: uses `cities/{city}/venues/{slug}?date=...&seats=...`; returns `""` if city missing (HEAD check fails → falls back to venue homepage)
-- `deep_links._resy_fallback()`: uses `cities/{city}/venues/{slug}` without date params as plain venue link
-- `static/app.js`: `_resolvedResyCity` captured from resolve response; sent in create payload; cleared on form reset; form validation relaxed to accept city+slug in lieu of numeric venue ID
-- Note: `resy_venue_id` (numeric) is NOT in the new URL format — monitoring API still requires it; restaurant will save but monitoring won't run without it (notifier logs a warning and skips)
-
-### "Check Now" button (Stage 7 / Priority 2)
-- Added `_check_running: bool` flag to `app/notifier.py`; `run_check()` returns early if already running and clears the flag in a `finally`-equivalent block after completion — prevents overlapping runs from the scheduler and a manual trigger
-- Added `POST /api/check-now` endpoint in `app/app.py`; returns 409 if a check is already in progress, otherwise spawns a daemon thread calling `run_check()` and returns immediately
-- Added `checkNow()` in `static/app.js`: POSTs to `/api/check-now`, disables the button and shows "Checking…", then after 3 s refreshes the activity log and status pill and re-enables the button
-- Added **Check Now** button to the dashboard header in `templates/index.html`, grouped with the status pill in a `.header-controls` flex container
-- Added `.header-controls` flex style to `static/style.css`
-
-### Scheduler status pill (Stage 7 / Priority 2)
-- Added `last_check_time: datetime | None` module-level variable to `app/notifier.py`; set to `datetime.now(timezone.utc)` at the end of every `run_check()` call
-- Added `GET /api/status` endpoint in `app/app.py` returning `{last_check, next_check, restaurant_count}`; `next_check` computed as `last_check + CHECK_INTERVAL_MINUTES`
-- Added `loadStatus()` in `static/app.js`; formats the `#status-pill` as "Last check: X min ago · Next: Y min"; called on init and every 30 s alongside the existing log refresh
+### Dashboard UX (Stage 7)
+- Check Now button with overlap protection
+- Scheduler status pill (last check / next check)
 
 ---
 
-## Previous Session
+## Previous Sessions
 
 **Session date:** 2026-05-02
 
-### CLI deduplication cleanup (Priority 2)
-- Replaced `load_seen_slots`/`save_seen_slots`/`get_seen_slot_key` in `main.py` with `db.has_notified_slot()`, `db.add_notified_slot()`, `db.remove_stale_notified_slots()`
-- Removed `import json`, `SEEN_SLOTS_FILE` constant, and the three file-based helpers from `main.py`
-- `check_restaurant()` signature simplified (no `seen_slots` param); `run_check()` calls `db.init_db()` on startup
-- CLI and Flask scheduler now share the same `notified_slots` SQLite table
-- Deleted `seen_slots.json` from the repo
-
-### Activity log pruning (Priority 4)
-- Added a `DELETE … NOT IN … LIMIT 500` prune query inside `add_activity_log()` in `app/db.py`; table is capped at 500 rows on every insert
-
-### Multi-party-size support (Stage 8)
-- Cross-size deduplication in `app/notifier.py`: `notified_this_run` set prevents a slot at the same date+time from firing notifications for both a larger and smaller party size in the same check run
-- API validation in `app/app.py`: `party_sizes` must be a non-empty list of integers 1–20; enforced on both create and update
-- Notification body updated to "Table for N" in `notifiers/base.py`
-- Chip-style party size input in dashboard: `ChipInput` class in `app.js` replaces the old comma-separated text field; chips are orderable via ↑/↓ buttons and removable with ×; ordinal hint labels (1st/2nd/3rd) shown on each chip; works in both the Add Restaurant form and every card edit panel
-
----
-
-## Previous Session
+- CLI deduplication unified with Flask scheduler (both use `notified_slots` SQLite table)
+- Activity log pruned to 500 entries on every insert
+- Multi-party-size chip UI; cross-size deduplication in notifier; API validation
 
 **Session date:** 2026-05-01
 
-### Push notification abstraction (Stage 3)
-- Created `notifiers/` package: `base.py` (ABC + `format_slot_body()`), `ntfy.py`, `pushover.py`, `__init__.py`
-- Added `notified_slots` table to SQLite; replaced `seen_slots.json` deduplication logic
-- Refactored `app/notifier.py`: per-slot push, batched email, ✅🔁🔍❌ log states
-- Updated `app/app.py`: new settings keys, NTFY_TOPIC auto-generation, `/api/test-notification` endpoint
-- Updated settings panel UI: provider dropdown, ntfy subscribe link with copy button, Pushover fields, Email/Push toggles, test notification button
-- Added `--test-notify` CLI flag to `main.py`
-- Updated `requirements.txt` (added `httpx>=0.27.0`), `.env.example`, `README.md`
-
-### Deep link booking URLs (Stage 5)
-- Created `deep_links.py` with `build_booking_url()`, `_validate_url()` (HEAD, 2 s timeout), and standalone CLI
-- Updated `notifiers/base.py`: `send()` now accepts `urls: dict` instead of a string; body appends "— tap to book"
-- Updated `notifiers/ntfy.py` and `notifiers/pushover.py` to use `urls["web_url"]`
-- Added `url TEXT` column to `activity_log` (backward-compatible ALTER TABLE)
-- Updated `add_activity_log()` to accept optional `url=` kwarg
-- Updated `app/notifier.py` to call `build_booking_url()` per slot and store URL in log
-- Added `/api/restaurants/<id>/deep-link` endpoint to `app/app.py`
-- Updated `static/app.js`: "Book Now →" link on log entries, "Test link" button on restaurant cards
-- Updated `static/style.css`: `.book-now-link` pill style
-- Updated `README.md` with "Deep Link Booking URLs" section and CLI examples
+- Push notification abstraction (`notifiers/` package, ntfy + Pushover)
+- Deep link system (`deep_links.py`, HEAD validation, Book Now UI, Test link button)
 
 ---
 
 ## Next Actions
 
-These are ready to pick up immediately in the next session with no additional context required.
+### Priority 1 — Availability count badge (Stage 7)
+Add a small badge to each watchlist card showing the number of available slots found in the last check. Requires storing the latest slot count per restaurant (e.g. a `last_slot_count` column or in-memory dict) and surfacing it via the `/api/restaurants` response.
 
-### Priority 1 — Resy deep link format ✅
-Confirmed format: `resy.com/cities/{city}/venues/{slug}?date=YYYY-MM-DD&seats=N` (city+slug, no numeric ID in path). All implemented — see "Completed This Session."
+### Priority 2 — Expand Resy location_id mapping
+`_LOCATION_IDS` in `resy_api.py` currently only has `new-york-ny → 1`. For each new city, check browser DevTools on resy.com to find the `location_id` used in `/3/venue` requests, then add it to the dict.
 
+### Priority 3 — End-to-end live test
+Run a full check cycle with a real Resy and OpenTable restaurant; verify:
+- Availability API returns slots
+- Deep links open the correct pre-filled booking page
+- Push notifications fire and the tap target URL is correct
+- Deduplication suppresses repeat notifications correctly
+
+### Priority 4 — Unit tests
+Add tests for `deep_links.py` (URL construction, fallback logic) and `notifiers/` (send payloads).
