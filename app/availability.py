@@ -6,7 +6,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
 
-from resy_api import TimeSlot, create_opentable_client, create_resy_client
+from opentable_api import create_opentable_client
+from resy_api import TimeSlot, create_resy_client
 
 logger = logging.getLogger(__name__)
 

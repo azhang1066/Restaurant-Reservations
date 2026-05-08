@@ -45,9 +45,10 @@ templates/
 static/
   app.js         All frontend logic (no framework)
   style.css      Dark theme
-deep_links.py    Booking URL builder with HEAD validation + CLI
-resy_api.py      ResyAPIClient + OpenTableAPIClient (availability, venue ID lookup, location_id auto-discovery)
-lookup_venue.py  URL parser for Resy and OpenTable restaurant URLs
+deep_links.py      Booking URL builder with HEAD validation + CLI
+resy_api.py        ResyAPIClient — availability, venue ID lookup, location_id auto-discovery
+opentable_api.py   OpenTableAPIClient — availability checks
+lookup_venue.py    URL parser for Resy and OpenTable restaurant URLs
 restaurants.py   Static config (legacy; superseded by SQLite)
 main.py          CLI entry point (--test, --test-notify, --discover-locations)
 ```

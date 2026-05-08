@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Resy and OpenTable API Client Module
-Handles all API interactions with better structure and error handling.
+Resy API client module — availability checks, venue ID lookup, location_id auto-discovery.
+OpenTable client lives in opentable_api.py.
 """
 
 import logging
@@ -444,88 +444,8 @@ class ResyAPIClient:
             return []
 
 
-class OpenTableAPIClient:
-    """Client for OpenTable API interactions."""
-    
-    BASE_URL = "https://platform.opentable.com/v1"
-    
-    def get_availability(
-        self,
-        restaurant_id: str,
-        party_size: int,
-        date: str,
-    ) -> list[TimeSlot]:
-        """
-        Check availability at a specific OpenTable restaurant.
-        
-        Args:
-            restaurant_id: OpenTable restaurant ID
-            party_size: Number of guests
-            date: Date in YYYY-MM-DD format
-            
-        Returns:
-            List of available time slots
-        """
-        url = f"{self.BASE_URL}/restaurants/{restaurant_id}/availability"
-        
-        params = {
-            "partySize": party_size,
-            "startDate": date,
-            "endDate": date,
-        }
-        
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        }
-        
-        try:
-            response = requests.get(
-                url,
-                headers=headers,
-                params=params,
-                timeout=30,
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            slots = []
-            for availability in data.get("availabilities", []):
-                slot_time = availability.get("time", "")
-                if slot_time:
-                    slots.append(TimeSlot(
-                        date=date,
-                        time=slot_time,
-                        datetime=f"{date}T{slot_time}:00",
-                        venue_id=restaurant_id,
-                        source="opentable",
-                    ))
-            
-            logger.debug(f"Found {len(slots)} slots at OpenTable {restaurant_id} on {date}")
-            return slots
-            
-        except requests.exceptions.Timeout:
-            logger.error(f"Timeout checking OpenTable availability for {restaurant_id}")
-            return []
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 404:
-                logger.warning(f"OpenTable restaurant {restaurant_id} not found")
-            else:
-                logger.error(f"OpenTable HTTP error {e.response.status_code}")
-            return []
-        except Exception as e:
-            logger.error(f"Error checking OpenTable availability: {e}")
-            return []
-
-
 def create_resy_client(
     api_key: Optional[str] = None,
     auth_token: Optional[str] = None,
 ) -> ResyAPIClient:
-    """Factory function to create a Resy API client."""
     return ResyAPIClient(api_key, auth_token)
-
-
-def create_opentable_client() -> OpenTableAPIClient:
-    """Factory function to create an OpenTable API client."""
-    return OpenTableAPIClient()

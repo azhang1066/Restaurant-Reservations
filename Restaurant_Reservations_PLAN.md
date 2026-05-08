@@ -97,6 +97,28 @@ Key architectural decisions:
 
 **Session date:** 2026-05-07
 
+### Architecture cleanup — threading, schema migrations, N+1 query, file split
+
+**Race condition on `_check_running` globals** (2026-05-07)
+- Replaced `_check_running: bool` with `_check_lock = threading.Lock()` in `notifier.py`
+- `run_check()` uses `_check_lock.acquire(blocking=False)` + try/finally — atomic, no TOCTOU gap
+- Added `is_check_running()` accessor; `app.py` no longer reads private `_notifier._check_running`
+
+**Schema migrations via try/except** (2026-05-07)
+- Added `_MIGRATIONS` list and `_run_migrations(conn)` in `db.py`
+- `PRAGMA user_version` tracks applied migrations; each runs exactly once
+- Fresh DBs: detected via `resy_slug` column presence → stamped to latest, no ALTER TABLE needed
+- `activity_log` CREATE TABLE now includes `url TEXT` directly
+
+**N+1 in `remove_stale_notified_slots`** (2026-05-07)
+- Replaced SELECT + Python loop with a single `DELETE … WHERE time NOT IN (…)` query
+- Empty `current_times` case handled with a bare `DELETE WHERE venue_id/date/party_size`
+
+**`OpenTableAPIClient` moved to `opentable_api.py`** (2026-05-07)
+- `OpenTableAPIClient` and `create_opentable_client()` extracted from `resy_api.py` into new `opentable_api.py`
+- `app/availability.py` imports `create_opentable_client` from `opentable_api`
+- `resy_api.py` docstring updated; `create_resy_client` docstring removed (self-evident)
+
 ### Architecture cleanup — inverted import, DB init overhead, legacy fields
 
 **Inverted import (app/notifier.py → main.py)**
@@ -168,12 +190,7 @@ Run a full check cycle with a real Resy and OpenTable restaurant; verify:
 - Run `--discover-locations` with fresh credentials to populate `_LOCATION_IDS`
 
 ### Priority 3 — Remaining architecture fixes
-The following issues were identified in the 2026-05-07 architecture review and not yet addressed:
 
-- **Race condition on `_check_running` globals** — `last_check_time` and `_check_running` in `notifier.py` are read/written from two threads without a lock; `app.py` also reads `_notifier._check_running` directly. Fix with `threading.Lock()` or `threading.Event()`.
-- **Schema migrations via try/except** — `init_db()` runs 4 `ALTER TABLE` try/excepts on every startup. Replace with a `user_version` PRAGMA-based migration table that runs each migration exactly once.
-- **N+1 in `remove_stale_notified_slots`** — fetches all stored slots then deletes each stale one in a loop; should be a single `DELETE WHERE time NOT IN (...)` query.
-- **`OpenTableAPIClient` in `resy_api.py`** — unrelated client in a misnamed file; move to `opentable_api.py`.
 - **Dead `struct_data` in `ResyAPIClient.search_venues`** — variable built but never sent; remove.
 - **Non-atomic `_save_env`** — reads, merges, and rewrites `.env` without file locking; concurrent saves can corrupt it. Fix with write-to-temp-then-rename.
 - **`CHECK_INTERVAL_MINUTES` imported from legacy `restaurants.py`** — should be `int(os.getenv("CHECK_INTERVAL_MINUTES", 20))` read directly in the scheduler.
