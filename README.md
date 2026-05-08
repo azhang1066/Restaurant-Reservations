@@ -31,9 +31,10 @@ Automated Python application to monitor Resy and OpenTable for restaurant availa
 
 ```
 app/
-  app.py         Flask REST API (CRUD, settings, resolve-url, deep-link, check-now, status)
-  db.py          SQLite layer — restaurants, activity_log, notified_slots tables
-  notifier.py    Background scheduler, check_restaurant(), push + email dispatch
+  app.py            Flask REST API (CRUD, settings, resolve-url, deep-link, check-now, status)
+  availability.py   Shared business logic — availability checks, time filtering, date helpers, email
+  db.py             SQLite layer — restaurants, activity_log, notified_slots tables
+  notifier.py       Background scheduler, check_restaurant(), push + email dispatch
 notifiers/
   base.py        BaseNotifier ABC + slot body formatter
   ntfy.py        ntfy push implementation
@@ -45,7 +46,7 @@ static/
   app.js         All frontend logic (no framework)
   style.css      Dark theme
 deep_links.py    Booking URL builder with HEAD validation + CLI
-resy_api.py      ResyAPIClient (availability, venue ID lookup, location_id auto-discovery)
+resy_api.py      ResyAPIClient + OpenTableAPIClient (availability, venue ID lookup, location_id auto-discovery)
 lookup_venue.py  URL parser for Resy and OpenTable restaurant URLs
 restaurants.py   Static config (legacy; superseded by SQLite)
 main.py          CLI entry point (--test, --test-notify, --discover-locations)

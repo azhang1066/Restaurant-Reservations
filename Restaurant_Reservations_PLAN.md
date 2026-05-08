@@ -95,18 +95,40 @@ Key architectural decisions:
 
 ## Completed This Session
 
+**Session date:** 2026-05-07
+
+### Architecture cleanup — inverted import, DB init overhead, legacy fields
+
+**Inverted import (app/notifier.py → main.py)**
+- Created `app/availability.py` — canonical home for shared business logic: `check_resy_availability`, `check_opentable_availability`, `get_date_for_day`, `filter_slots_by_time`, `send_email_notification`
+- `app/notifier.py` now imports from `app.availability` instead of `main`; dependency direction is correct
+- `main.py` duplicate definitions removed (~100 lines); imports from `app.availability` like any other consumer
+
+**`init_db()` called on every database operation**
+- All 11 per-function `conn = init_db()` calls in `db.py` replaced with `conn = get_connection()`
+- Schema setup (DDL) runs only once at startup via the existing `db.init_db()` call in `start_scheduler()`
+- Eliminates ~7 unnecessary DDL statements per DB operation; a full check cycle no longer triggers hundreds of `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE` round-trips
+
+**Legacy `time_earliest`/`time_latest` fields**
+- Added one-time data migration in `init_db()`: any rows carrying `time_earliest`/`time_latest` but no `time_ranges` are promoted to `time_ranges` format on startup
+- `_row_to_restaurant` compat block removed; returned dict no longer includes the old fields
+- `add_restaurant` INSERT and `update_restaurant` UPDATE no longer write those columns (13 columns instead of 15)
+- `ensure_migrated` converts the legacy static config's `time_range` tuple directly to `time_ranges` dict
+- `app.py` create/update endpoint handlers cleaned of both fields
+- Columns remain in the SQLite schema (safe); only the read/write paths are gone
+
+---
+
+## Previous Sessions
+
 **Session date:** 2026-05-05
 
-### Resy location_id auto-discovery (Priority 2)
+### Resy location_id auto-discovery
 - `_auto_discover_location_id(slug, city)` — probes location_ids 1–30 on `/3/venue`, updates `_LOCATION_IDS` in-place, logs paste-ready hint for permanent storage
 - `_lookup_by_search` now accepts `city`; kicks off `_auto_discover_location_id` in a daemon thread after the first successful coordinate-based lookup for an unmapped city
 - `discover_all_location_ids()` — batch discovers every city in `_CITY_COORDS`; logs a full paste-ready `_LOCATION_IDS` block
 - CLI: `python main.py --discover-locations` (requires valid credentials; Resy auth token expires periodically)
 - README updated with new CLI flag and a "Resy City Location IDs" section
-
----
-
-## Previous Sessions
 
 **Session date:** 2026-05-04
 
@@ -145,5 +167,16 @@ Run a full check cycle with a real Resy and OpenTable restaurant; verify:
 - Deduplication suppresses repeat notifications correctly
 - Run `--discover-locations` with fresh credentials to populate `_LOCATION_IDS`
 
-### Priority 3 — Unit tests
+### Priority 3 — Remaining architecture fixes
+The following issues were identified in the 2026-05-07 architecture review and not yet addressed:
+
+- **Race condition on `_check_running` globals** — `last_check_time` and `_check_running` in `notifier.py` are read/written from two threads without a lock; `app.py` also reads `_notifier._check_running` directly. Fix with `threading.Lock()` or `threading.Event()`.
+- **Schema migrations via try/except** — `init_db()` runs 4 `ALTER TABLE` try/excepts on every startup. Replace with a `user_version` PRAGMA-based migration table that runs each migration exactly once.
+- **N+1 in `remove_stale_notified_slots`** — fetches all stored slots then deletes each stale one in a loop; should be a single `DELETE WHERE time NOT IN (...)` query.
+- **`OpenTableAPIClient` in `resy_api.py`** — unrelated client in a misnamed file; move to `opentable_api.py`.
+- **Dead `struct_data` in `ResyAPIClient.search_venues`** — variable built but never sent; remove.
+- **Non-atomic `_save_env`** — reads, merges, and rewrites `.env` without file locking; concurrent saves can corrupt it. Fix with write-to-temp-then-rename.
+- **`CHECK_INTERVAL_MINUTES` imported from legacy `restaurants.py`** — should be `int(os.getenv("CHECK_INTERVAL_MINUTES", 20))` read directly in the scheduler.
+
+### Priority 4 — Unit tests
 Add tests for `deep_links.py` (URL construction, fallback logic) and `notifiers/` (send payloads).
