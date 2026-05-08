@@ -2,6 +2,7 @@ import json
 import os
 import random
 import string
+import tempfile
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -58,9 +59,15 @@ def _load_env() -> dict:
 def _save_env(settings: dict) -> None:
     current = _load_env()
     current.update(settings)
-    with open(ENV_PATH, "w", encoding="utf-8") as env_file:
-        for key, value in current.items():
-            env_file.write(f"{key}={value}\n")
+    fd, tmp = tempfile.mkstemp(dir=ENV_PATH.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
+            for key, value in current.items():
+                tmp_file.write(f"{key}={value}\n")
+        Path(tmp).replace(ENV_PATH)
+    except Exception:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 @app.route("/")
