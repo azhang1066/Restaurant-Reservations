@@ -328,14 +328,15 @@ def remove_stale_notified_slots(
     venue_id: str, date: str, party_size: int, current_times: set
 ) -> None:
     conn = get_connection()
-    rows = conn.execute(
-        "SELECT time FROM notified_slots WHERE venue_id=? AND date=? AND party_size=?",
-        (venue_id, date, party_size),
-    ).fetchall()
     with conn:
-        for row in rows:
-            if row["time"] not in current_times:
-                conn.execute(
-                    "DELETE FROM notified_slots WHERE venue_id=? AND date=? AND time=? AND party_size=?",
-                    (venue_id, date, row["time"], party_size),
-                )
+        if not current_times:
+            conn.execute(
+                "DELETE FROM notified_slots WHERE venue_id=? AND date=? AND party_size=?",
+                (venue_id, date, party_size),
+            )
+        else:
+            placeholders = ",".join("?" * len(current_times))
+            conn.execute(
+                f"DELETE FROM notified_slots WHERE venue_id=? AND date=? AND party_size=? AND time NOT IN ({placeholders})",
+                [venue_id, date, party_size, *current_times],
+            )
