@@ -88,6 +88,20 @@ def init_db() -> sqlite3.Connection:
             )
             """
         )
+        # One-time migration: promote time_earliest/time_latest into time_ranges
+        rows = conn.execute(
+            "SELECT id, days, time_earliest, time_latest FROM restaurants "
+            "WHERE (time_earliest IS NOT NULL OR time_latest IS NOT NULL) "
+            "AND (time_ranges IS NULL OR time_ranges = '' OR time_ranges = '[]')"
+        ).fetchall()
+        for row in rows:
+            days = _deserialize_list(row["days"])
+            t_earliest, t_latest = row["time_earliest"], row["time_latest"]
+            if days and (t_earliest or t_latest):
+                conn.execute(
+                    "UPDATE restaurants SET time_ranges = ? WHERE id = ?",
+                    (json.dumps({day: [t_earliest, t_latest] for day in days}), row["id"]),
+                )
     return conn
 
 
@@ -110,12 +124,6 @@ def _deserialize_list(value: Optional[str]) -> List[Any]:
 
 
 def _row_to_restaurant(row: sqlite3.Row) -> Dict[str, Any]:
-    time_ranges = _deserialize_list(row["time_ranges"]) if row["time_ranges"] else {}
-    # Backward compatibility: if time_ranges is empty and old fields exist, convert
-    if not time_ranges and (row["time_earliest"] or row["time_latest"]):
-        # Assume the time range applies to all selected days
-        days = _deserialize_list(row["days"])
-        time_ranges = {day: [row["time_earliest"], row["time_latest"]] for day in days if row["time_earliest"] or row["time_latest"]}
     return {
         "id": row["id"],
         "name": row["name"],
@@ -127,9 +135,7 @@ def _row_to_restaurant(row: sqlite3.Row) -> Dict[str, Any]:
         "opentable_slug": row["opentable_slug"] if row["opentable_slug"] else "",
         "party_sizes": _deserialize_list(row["party_sizes"]),
         "days": _deserialize_list(row["days"]),
-        "time_earliest": row["time_earliest"],  # Keep for compatibility
-        "time_latest": row["time_latest"],  # Keep for compatibility
-        "time_ranges": time_ranges,
+        "time_ranges": _deserialize_list(row["time_ranges"]) if row["time_ranges"] else {},
         "enabled": bool(row["enabled"]),
     }
 
@@ -155,9 +161,9 @@ def add_restaurant(restaurant: Dict[str, Any]) -> int:
             INSERT INTO restaurants (
                 name, source, resy_venue_id, resy_slug, resy_city,
                 opentable_rid, opentable_slug,
-                party_sizes, days, time_earliest, time_latest, time_ranges,
+                party_sizes, days, time_ranges,
                 enabled, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 restaurant["name"],
@@ -169,8 +175,6 @@ def add_restaurant(restaurant: Dict[str, Any]) -> int:
                 restaurant.get("opentable_slug") or "",
                 _serialize_list(restaurant.get("party_sizes", [])),
                 _serialize_list(restaurant.get("days", [])),
-                restaurant.get("time_earliest"),
-                restaurant.get("time_latest"),
                 _serialize_list(restaurant.get("time_ranges", {})),
                 int(restaurant.get("enabled", True)),
                 now,
@@ -196,8 +200,6 @@ def update_restaurant(restaurant_id: int, restaurant: Dict[str, Any]) -> bool:
                 opentable_slug = ?,
                 party_sizes = ?,
                 days = ?,
-                time_earliest = ?,
-                time_latest = ?,
                 time_ranges = ?,
                 enabled = ?,
                 updated_at = ?
@@ -213,8 +215,6 @@ def update_restaurant(restaurant_id: int, restaurant: Dict[str, Any]) -> bool:
                 restaurant.get("opentable_slug") or "",
                 _serialize_list(restaurant.get("party_sizes", [])),
                 _serialize_list(restaurant.get("days", [])),
-                restaurant.get("time_earliest"),
-                restaurant.get("time_latest"),
                 _serialize_list(restaurant.get("time_ranges", {})),
                 int(restaurant.get("enabled", True)),
                 now,
@@ -275,11 +275,11 @@ def ensure_migrated(config_restaurants: List[Dict[str, Any]]) -> None:
         if isinstance(party_sizes, int):
             party_sizes = [party_sizes]
 
-        time_earliest = None
-        time_latest = None
+        days = restaurant.get("days", [])
+        time_ranges = {}
         time_range = restaurant.get("time_range")
         if isinstance(time_range, (list, tuple)) and len(time_range) == 2:
-            time_earliest, time_latest = time_range
+            time_ranges = {day: list(time_range) for day in days}
 
         add_restaurant(
             {
@@ -288,9 +288,8 @@ def ensure_migrated(config_restaurants: List[Dict[str, Any]]) -> None:
                 "resy_venue_id": restaurant.get("resy_venue_id") if source == "resy" else None,
                 "opentable_rid": restaurant.get("opentable_rid") if source == "opentable" else None,
                 "party_sizes": party_sizes,
-                "days": restaurant.get("days", []),
-                "time_earliest": time_earliest,
-                "time_latest": time_latest,
+                "days": days,
+                "time_ranges": time_ranges,
                 "enabled": True,
             }
         )

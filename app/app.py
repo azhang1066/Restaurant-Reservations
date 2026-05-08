@@ -93,8 +93,6 @@ def create_restaurant():
         "opentable_slug": payload.get("opentable_slug") or "",
         "party_sizes": payload.get("party_sizes", []),
         "days": payload.get("days", []),
-        "time_earliest": payload.get("time_earliest"),
-        "time_latest": payload.get("time_latest"),
         "time_ranges": payload.get("time_ranges", {}),
         "enabled": payload.get("enabled", True),
     }
@@ -121,8 +119,6 @@ def update_restaurant(restaurant_id: int):
             "opentable_rid": payload.get("opentable_rid", restaurant.get("opentable_rid")),
             "party_sizes": payload.get("party_sizes", restaurant.get("party_sizes", [])),
             "days": payload.get("days", restaurant.get("days", [])),
-            "time_earliest": payload.get("time_earliest", restaurant.get("time_earliest")),
-            "time_latest": payload.get("time_latest", restaurant.get("time_latest")),
             "time_ranges": payload.get("time_ranges", restaurant.get("time_ranges", {})),
             "enabled": payload.get("enabled", restaurant.get("enabled", True)),
         }
