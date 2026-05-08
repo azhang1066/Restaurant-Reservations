@@ -9,14 +9,14 @@ from dotenv import load_dotenv
 
 import restaurants as restaurant_config
 from app import db
-from deep_links import build_booking_url
-from main import (
+from app.availability import (
     check_opentable_availability,
     check_resy_availability,
     filter_slots_by_time,
     get_date_for_day,
     send_email_notification,
 )
+from deep_links import build_booking_url
 from notifiers import get_notifier
 
 load_dotenv()
