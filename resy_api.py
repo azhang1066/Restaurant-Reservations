@@ -72,27 +72,8 @@ class ResyAPIClient:
         query: Optional[str] = None,
         latitude: float = 40.7128,
         longitude: float = -74.0060,
-        date: Optional[str] = None,
-        party_size: int = 2,
         limit: int = 20,
     ) -> list[dict]:
-        """
-        Search for restaurant venues.
-        
-        Args:
-            query: Search query (restaurant name/cuisine)
-            latitude: Latitude for location search
-            longitude: Longitude for location search
-            date: Date in YYYY-MM-DD format
-            party_size: Number of guests
-            limit: Maximum results
-            
-        Returns:
-            List of venue results
-        """
-        if not date:
-            date = datetime.now().strftime("%Y-%m-%d")
-        
         url = f"{self.BASE_URL}/3/search"
         
         params = {
@@ -102,20 +83,8 @@ class ResyAPIClient:
             "per_page": limit,
             "sort": "relevance",
         }
-        
-        # Struct data for availability search
-        struct_data = {
-            "availability": {
-                "start_date": date,
-                "end_date": date,
-                "party_size": party_size,
-            },
-            "query": query or "",
-            "location": {"latitude": latitude, "longitude": longitude},
-        }
-        
+
         try:
-            # Note: Actual implementation may vary based on Resy API version
             response = requests.get(
                 url,
                 headers=self._get_headers(),
