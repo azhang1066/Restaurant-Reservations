@@ -24,7 +24,11 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 last_check_time: datetime | None = None
-_check_running: bool = False
+_check_lock = threading.Lock()
+
+
+def is_check_running() -> bool:
+    return _check_lock.locked()
 
 
 def check_restaurant(restaurant: dict) -> None:
@@ -146,35 +150,35 @@ def check_restaurant(restaurant: dict) -> None:
 
 
 def run_check() -> None:
-    global last_check_time, _check_running
-    if _check_running:
+    global last_check_time
+    if not _check_lock.acquire(blocking=False):
         logger.info("Check already in progress — skipping")
         return
-    _check_running = True
+    try:
+        logger.info("Starting availability check")
+        db.add_activity_log("Starting availability check", "info")
 
-    logger.info("Starting availability check")
-    db.add_activity_log("Starting availability check", "info")
+        restaurants = db.get_restaurants()
 
-    restaurants = db.get_restaurants()
+        if not restaurants:
+            msg = "No restaurants configured yet. Add a restaurant in the dashboard."
+            logger.info(msg)
+            db.add_activity_log(msg, "info")
 
-    if not restaurants:
-        msg = "No restaurants configured yet. Add a restaurant in the dashboard."
-        logger.info(msg)
-        db.add_activity_log(msg, "info")
+        for restaurant in restaurants:
+            if not restaurant.get("enabled", True):
+                continue
+            try:
+                check_restaurant(restaurant)
+            except Exception as e:
+                logger.error(f"Error checking {restaurant['name']}: {e}")
+                db.add_activity_log(f"Error checking {restaurant['name']}: {e}", "error")
 
-    for restaurant in restaurants:
-        if not restaurant.get("enabled", True):
-            continue
-        try:
-            check_restaurant(restaurant)
-        except Exception as e:
-            logger.error(f"Error checking {restaurant['name']}: {e}")
-            db.add_activity_log(f"Error checking {restaurant['name']}: {e}", "error")
-
-    logger.info("Availability check complete")
-    db.add_activity_log("Availability check complete", "info")
-    last_check_time = datetime.now(timezone.utc)
-    _check_running = False
+        logger.info("Availability check complete")
+        db.add_activity_log("Availability check complete", "info")
+        last_check_time = datetime.now(timezone.utc)
+    finally:
+        _check_lock.release()
 
 
 def start_scheduler() -> None:

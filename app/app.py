@@ -268,7 +268,7 @@ def restaurant_deep_link(restaurant_id: int):
 
 @app.route("/api/check-now", methods=["POST"])
 def check_now():
-    if _notifier._check_running:
+    if _notifier.is_check_running():
         return jsonify({"success": False, "message": "A check is already in progress."}), 409
     thread = threading.Thread(target=_notifier.run_check, daemon=True)
     thread.start()
