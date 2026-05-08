@@ -218,13 +218,14 @@ def main():
         logger.info("Running in test mode (single check)")
         run_check()
     else:
-        logger.info(f"Running in scheduled mode (every {restaurants.CHECK_INTERVAL_MINUTES} minutes)")
-        
+        interval = int(os.getenv("CHECK_INTERVAL_MINUTES", 20))
+        logger.info(f"Running in scheduled mode (every {interval} minutes)")
+
         # Run immediately on start
         run_check()
-        
+
         # Schedule recurring checks
-        schedule.every(restaurants.CHECK_INTERVAL_MINUTES).minutes.do(run_check)
+        schedule.every(interval).minutes.do(run_check)
         
         while True:
             schedule.run_pending()

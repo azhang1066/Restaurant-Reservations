@@ -187,7 +187,7 @@ def start_scheduler() -> None:
     logger.info("Starting scheduler thread")
     try:
         run_check()
-        schedule.every(restaurant_config.CHECK_INTERVAL_MINUTES).minutes.do(run_check)
+        schedule.every(int(os.getenv("CHECK_INTERVAL_MINUTES", 20))).minutes.do(run_check)
         while True:
             schedule.run_pending()
             time.sleep(1)

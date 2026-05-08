@@ -13,7 +13,6 @@ from flask import Flask, jsonify, render_template, request
 from . import db
 from . import notifier as _notifier
 from .notifier import start_background_scheduler
-import restaurants as restaurant_config
 from deep_links import build_booking_url
 from lookup_venue import parse_opentable_url, parse_resy_url
 from notifiers import get_notifier
@@ -287,7 +286,7 @@ def get_status():
     last_check = _notifier.last_check_time
     next_check = None
     if last_check:
-        next_check = last_check + timedelta(minutes=restaurant_config.CHECK_INTERVAL_MINUTES)
+        next_check = last_check + timedelta(minutes=int(os.getenv("CHECK_INTERVAL_MINUTES", 20)))
     return jsonify({
         "last_check": last_check.isoformat() if last_check else None,
         "next_check": next_check.isoformat() if next_check else None,

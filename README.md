@@ -154,6 +154,7 @@ For Gmail, generate an [App Password](https://myaccount.google.com/apppasswords)
 | `PUSHOVER_APP_TOKEN` | Pushover app token | For Pushover |
 | `NOTIFY_VIA_PUSH` | Enable push channel (`true`/`false`) | No |
 | `NOTIFY_VIA_EMAIL` | Enable email channel (`true`/`false`) | No |
+| `CHECK_INTERVAL_MINUTES` | How often to poll for availability (default: `20`) | No |
 
 ## Adding Restaurants
 

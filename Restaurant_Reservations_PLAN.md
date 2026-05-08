@@ -119,6 +119,18 @@ Key architectural decisions:
 - `app/availability.py` imports `create_opentable_client` from `opentable_api`
 - `resy_api.py` docstring updated; `create_resy_client` docstring removed (self-evident)
 
+**Dead `struct_data` in `ResyAPIClient.search_venues`** (2026-05-07)
+- Removed `struct_data` dict (built but never sent), `date` and `party_size` parameters (only fed `struct_data`), and the stale docstring
+
+**Non-atomic `_save_env`** (2026-05-07)
+- `_save_env` now writes to a temp file via `tempfile.mkstemp` in the same directory, then atomically renames it into place with `Path.replace()`
+- Original `.env` is never partially written; temp file is cleaned up on error
+
+**`CHECK_INTERVAL_MINUTES` read directly from env** (2026-05-07)
+- Removed `CHECK_INTERVAL_MINUTES` from `restaurants.py` usage in `notifier.py`, `app.py`, and `main.py`
+- All three now call `int(os.getenv("CHECK_INTERVAL_MINUTES", 20))` directly
+- `import restaurants as restaurant_config` removed from `app.py` (was the only remaining use)
+
 ### Architecture cleanup — inverted import, DB init overhead, legacy fields
 
 **Inverted import (app/notifier.py → main.py)**
@@ -189,11 +201,5 @@ Run a full check cycle with a real Resy and OpenTable restaurant; verify:
 - Deduplication suppresses repeat notifications correctly
 - Run `--discover-locations` with fresh credentials to populate `_LOCATION_IDS`
 
-### Priority 3 — Remaining architecture fixes
-
-- **Dead `struct_data` in `ResyAPIClient.search_venues`** — variable built but never sent; remove.
-- **Non-atomic `_save_env`** — reads, merges, and rewrites `.env` without file locking; concurrent saves can corrupt it. Fix with write-to-temp-then-rename.
-- **`CHECK_INTERVAL_MINUTES` imported from legacy `restaurants.py`** — should be `int(os.getenv("CHECK_INTERVAL_MINUTES", 20))` read directly in the scheduler.
-
-### Priority 4 — Unit tests
+### Priority 3 — Unit tests
 Add tests for `deep_links.py` (URL construction, fallback logic) and `notifiers/` (send payloads).
