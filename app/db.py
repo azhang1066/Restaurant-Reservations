@@ -17,6 +17,35 @@ def get_connection() -> sqlite3.Connection:
     return conn
 
 
+# Each entry is applied exactly once, in order, identified by its 1-based index.
+# PRAGMA user_version tracks how many have been applied so far.
+_MIGRATIONS: List[str] = [
+    "ALTER TABLE restaurants ADD COLUMN time_ranges TEXT",       # 1
+    "ALTER TABLE restaurants ADD COLUMN resy_slug TEXT",         # 2
+    "ALTER TABLE restaurants ADD COLUMN resy_city TEXT",         # 3
+    "ALTER TABLE restaurants ADD COLUMN opentable_slug TEXT",    # 4
+    "ALTER TABLE activity_log ADD COLUMN url TEXT",              # 5
+]
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    target = len(_MIGRATIONS)
+    if version >= target:
+        return
+    # Fresh database: CREATE TABLE IF NOT EXISTS already includes every column,
+    # so stamp to the latest version without running ALTER TABLE statements.
+    if version == 0:
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(restaurants)").fetchall()}
+        if "resy_slug" in existing:
+            conn.execute(f"PRAGMA user_version = {target}")
+            return
+    for i, sql in enumerate(_MIGRATIONS, start=1):
+        if i > version:
+            conn.execute(sql)
+            conn.execute(f"PRAGMA user_version = {i}")
+
+
 def init_db() -> sqlite3.Connection:
     conn = get_connection()
     with conn:
@@ -42,23 +71,6 @@ def init_db() -> sqlite3.Connection:
             )
             """
         )
-        # Add time_ranges column if it doesn't exist (for migration)
-        try:
-            conn.execute("ALTER TABLE restaurants ADD COLUMN time_ranges TEXT")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-        try:
-            conn.execute("ALTER TABLE restaurants ADD COLUMN resy_slug TEXT")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-        try:
-            conn.execute("ALTER TABLE restaurants ADD COLUMN resy_city TEXT")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-        try:
-            conn.execute("ALTER TABLE restaurants ADD COLUMN opentable_slug TEXT")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS activity_log (
@@ -66,16 +78,11 @@ def init_db() -> sqlite3.Connection:
                 timestamp TEXT NOT NULL,
                 level TEXT NOT NULL,
                 message TEXT NOT NULL,
-                highlight INTEGER NOT NULL DEFAULT 0
+                highlight INTEGER NOT NULL DEFAULT 0,
+                url TEXT
             )
             """
         )
-        # Add url column to activity_log for deep link storage
-        try:
-            conn.execute("ALTER TABLE activity_log ADD COLUMN url TEXT")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS notified_slots (
@@ -88,7 +95,8 @@ def init_db() -> sqlite3.Connection:
             )
             """
         )
-        # One-time migration: promote time_earliest/time_latest into time_ranges
+        _run_migrations(conn)
+        # One-time data migration: promote time_earliest/time_latest into time_ranges
         rows = conn.execute(
             "SELECT id, days, time_earliest, time_latest FROM restaurants "
             "WHERE (time_earliest IS NOT NULL OR time_latest IS NOT NULL) "
