@@ -135,19 +135,19 @@ def _row_to_restaurant(row: sqlite3.Row) -> Dict[str, Any]:
 
 
 def get_restaurants() -> List[Dict[str, Any]]:
-    conn = init_db()
+    conn = get_connection()
     cursor = conn.execute("SELECT * FROM restaurants ORDER BY id DESC")
     return [_row_to_restaurant(row) for row in cursor.fetchall()]
 
 
 def get_restaurant(restaurant_id: int) -> Optional[Dict[str, Any]]:
-    conn = init_db()
+    conn = get_connection()
     row = conn.execute("SELECT * FROM restaurants WHERE id = ?", (restaurant_id,)).fetchone()
     return _row_to_restaurant(row) if row else None
 
 
 def add_restaurant(restaurant: Dict[str, Any]) -> int:
-    conn = init_db()
+    conn = get_connection()
     now = datetime.utcnow().isoformat()
     with conn:
         cursor = conn.execute(
@@ -181,7 +181,7 @@ def add_restaurant(restaurant: Dict[str, Any]) -> int:
 
 
 def update_restaurant(restaurant_id: int, restaurant: Dict[str, Any]) -> bool:
-    conn = init_db()
+    conn = get_connection()
     now = datetime.utcnow().isoformat()
     with conn:
         cursor = conn.execute(
@@ -225,7 +225,7 @@ def update_restaurant(restaurant_id: int, restaurant: Dict[str, Any]) -> bool:
 
 
 def delete_restaurant(restaurant_id: int) -> bool:
-    conn = init_db()
+    conn = get_connection()
     with conn:
         cursor = conn.execute("DELETE FROM restaurants WHERE id = ?", (restaurant_id,))
     return cursor.rowcount > 0
@@ -237,7 +237,7 @@ def add_activity_log(
     highlight: bool = False,
     url: Optional[str] = None,
 ) -> None:
-    conn = init_db()
+    conn = get_connection()
     now = datetime.utcnow().isoformat()
     with conn:
         conn.execute(
@@ -250,7 +250,7 @@ def add_activity_log(
 
 
 def get_recent_logs(limit: int = 50) -> List[Dict[str, Any]]:
-    conn = init_db()
+    conn = get_connection()
     cursor = conn.execute(
         "SELECT timestamp, level, message, highlight, url FROM activity_log ORDER BY id DESC LIMIT ?",
         (limit,),
@@ -259,7 +259,7 @@ def get_recent_logs(limit: int = 50) -> List[Dict[str, Any]]:
 
 
 def ensure_migrated(config_restaurants: List[Dict[str, Any]]) -> None:
-    conn = init_db()
+    conn = get_connection()
     count = conn.execute("SELECT COUNT(*) FROM restaurants").fetchone()[0]
     if count > 0:
         return
@@ -298,7 +298,7 @@ def ensure_migrated(config_restaurants: List[Dict[str, Any]]) -> None:
 
 
 def has_notified_slot(venue_id: str, date: str, time: str, party_size: int) -> bool:
-    conn = init_db()
+    conn = get_connection()
     row = conn.execute(
         "SELECT 1 FROM notified_slots WHERE venue_id=? AND date=? AND time=? AND party_size=?",
         (venue_id, date, time, party_size),
@@ -307,7 +307,7 @@ def has_notified_slot(venue_id: str, date: str, time: str, party_size: int) -> b
 
 
 def add_notified_slot(venue_id: str, date: str, time: str, party_size: int) -> None:
-    conn = init_db()
+    conn = get_connection()
     from datetime import timezone
     now = datetime.now(timezone.utc).isoformat()
     with conn:
@@ -320,8 +320,7 @@ def add_notified_slot(venue_id: str, date: str, time: str, party_size: int) -> N
 def remove_stale_notified_slots(
     venue_id: str, date: str, party_size: int, current_times: set
 ) -> None:
-    """Remove notified slots that are no longer available so they re-notify if they reappear."""
-    conn = init_db()
+    conn = get_connection()
     rows = conn.execute(
         "SELECT time FROM notified_slots WHERE venue_id=? AND date=? AND party_size=?",
         (venue_id, date, party_size),
