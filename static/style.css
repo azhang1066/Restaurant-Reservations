@@ -506,3 +506,99 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 768px) {
+  /* Shell */
+  .page-shell {
+    padding: 16px;
+  }
+
+  /* Header: stack vertically so controls don't overflow */
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .header-controls {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  /* Status pill spans full row, centered */
+  .status-pill {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Touch targets: 44px minimum height on all buttons */
+  .button {
+    min-height: 44px;
+  }
+
+  /* Standalone form buttons full-width */
+  #resolve-url,
+  #restaurant-form > .button,
+  #settings-form > .button {
+    width: 100%;
+  }
+
+  /* Card header: stack name block and action buttons vertically */
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .card-header .edit-actions {
+    width: 100%;
+  }
+
+  /* All edit-action buttons: 2-per-row, equal width */
+  .edit-actions .button {
+    flex: 1;
+    min-width: calc(50% - 6px);
+  }
+
+  /* Day-time rows: 2-row grid so time inputs aren't squeezed */
+  .day-time-row {
+    display: grid;
+    grid-template-columns: 24px 1fr 1fr;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* Day label spans both 1fr columns */
+  .day-time-row > :nth-child(2) {
+    grid-column: 2 / span 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  /* Earliest time: col 2, row 2 */
+  .day-time-row > :nth-child(3) {
+    grid-column: 2;
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Latest time: col 3, row 2 */
+  .day-time-row > :nth-child(4) {
+    grid-column: 3;
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* ntfy topic + Copy link button: stack vertically */
+  .input-with-action {
+    flex-direction: column;
+  }
+
+  /* Book Now pill: prevent long URLs from overflowing log items */
+  .book-now-link {
+    max-width: 100%;
+    word-break: break-all;
+  }
+}
