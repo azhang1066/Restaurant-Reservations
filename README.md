@@ -16,6 +16,13 @@ Automated Python application to monitor Resy and OpenTable for restaurant availa
 - Smart deduplication — re-notifies only if a slot disappeared and came back
 - **Deep link booking** — notifications tap straight into the pre-filled booking flow
 
+**One-Tap Resy Booking**
+- **Book via Resy** button appears on every matching slot in the activity log — completes the reservation programmatically without leaving the dashboard
+- **Auto-Book** mode (opt-in, off by default) — books the first available slot automatically the moment it's found; sends a "✅ Booked!" push notification with the confirmation token
+- Full booking history in a **Bookings** panel — restaurant, date, time, party size, confirmation token, status badge, and a Cancel button
+- Per-restaurant 60-second cooldown prevents hammering the API on rapid slot fluctuations
+- Safety checks before every booking: re-confirms the slot is still available, aborts if no payment method is on file, surfaces Resy's error messages as plain English
+
 **Smart Scheduling**
 - Background monitoring on configurable intervals (default 20 min)
 - **Check Now** button for an immediate on-demand check
@@ -31,22 +38,22 @@ Automated Python application to monitor Resy and OpenTable for restaurant availa
 
 ```
 app/
-  app.py            Flask REST API (CRUD, settings, resolve-url, deep-link, check-now, status)
+  app.py            Flask REST API (CRUD, settings, resolve-url, deep-link, book, bookings, check-now, status)
   availability.py   Shared business logic — availability checks, time filtering, date helpers, email
-  db.py             SQLite layer — restaurants, activity_log, notified_slots tables
-  notifier.py       Background scheduler, check_restaurant(), push + email dispatch
+  db.py             SQLite layer — restaurants, activity_log, notified_slots, bookings tables
+  notifier.py       Background scheduler, check_restaurant(), auto-book, push + email dispatch
 notifiers/
   base.py        BaseNotifier ABC + slot body formatter
   ntfy.py        ntfy push implementation
   pushover.py    Pushover push implementation
   __init__.py    get_notifier() factory
 templates/
-  index.html     Single-page dashboard
+  index.html     Single-page dashboard (5 panels including Bookings)
 static/
   app.js         All frontend logic (no framework)
   style.css      Dark theme
 deep_links.py      Booking URL builder with HEAD validation + CLI
-resy_api.py        ResyAPIClient — availability, venue ID lookup, location_id auto-discovery
+resy_api.py        ResyAPIClient — availability, venue ID lookup, booking (get_booking_details / book_reservation / cancel_reservation)
 opentable_api.py   OpenTableAPIClient — availability checks
 lookup_venue.py    URL parser for Resy and OpenTable restaurant URLs
 restaurants.py   Static config (legacy; superseded by SQLite)
@@ -142,6 +149,8 @@ For Gmail, generate an [App Password](https://myaccount.google.com/apppasswords)
 |---|---|---|
 | `RESY_API_KEY` | Resy API key (from browser DevTools) | For Resy monitoring |
 | `RESY_AUTH_TOKEN` | Resy auth token (from browser DevTools) | For Resy monitoring |
+| `AUTO_BOOK` | Automatically book the first matching slot (`true`/`false`, default `false`) | No |
+| `RESY_PAYMENT_METHOD_ID` | Override which saved card Resy charges; leave blank to use your account default | No |
 | `SMTP_HOST` | SMTP server (e.g. `smtp.gmail.com`) | For email |
 | `SMTP_PORT` | SMTP port (usually `587`) | For email |
 | `SMTP_USER` | Email account username | For email |
@@ -175,6 +184,43 @@ Use the chip input to add sizes and drag them into priority order with ↑/↓.
 ### Per-Day Time Windows
 
 Each selected day can have its own time window. Leave a window blank to accept any time.
+
+## One-Tap Resy Booking
+
+When a Resy slot is found, the dashboard offers two ways to book it without leaving the app:
+
+### Book via Resy button (manual)
+
+Every slot-found entry in the Activity Log includes a **Book via Resy** button. Clicking it:
+1. Re-calls `/3/details` to confirm the slot is still available
+2. Submits `/3/book` with your saved payment method
+3. Shows a toast with the confirmation token and adds the booking to the Bookings panel
+
+The existing **Book Now →** link (opens the Resy website) is preserved alongside the button.
+
+### Auto-Book (automatic)
+
+Enable `AUTO_BOOK=true` in Settings (or `.env`) to book slots automatically the moment they're found. A prominent warning in the dashboard reminds you that this charges your saved card without a confirmation prompt.
+
+Safety guardrails enforced on every auto-book attempt:
+- Slot is re-confirmed via `/3/details` immediately before booking — stale data is never submitted
+- If no payment method is on file, the attempt aborts with a clear log message
+- A 60-second per-restaurant cooldown prevents retrying the same venue repeatedly on rapid slot fluctuations
+- Every attempt (success or failure) is written to the activity log with full details
+- If booking fails for any reason, the normal availability notification fires as a fallback
+
+### Bookings panel
+
+The 5th dashboard panel lists all bookings: restaurant, date, time, party size, confirmation token, status badge (confirmed / cancelled / failed), and a **Cancel** button. Cancellation calls Resy's `/3/reservation` DELETE endpoint and updates the status in the local database.
+
+### Error messages
+
+| Situation | Message shown |
+|---|---|
+| Slot taken before booking completes | "That slot was just taken — keeping watch for the next one" |
+| No card on file | "Add a credit card to your Resy account before enabling auto-book" |
+| Auth token expired | "Your Resy session has expired — update RESY_API_KEY in Settings" |
+| Network timeout | "Resy didn't respond in time — will retry on the next check cycle" |
 
 ## Deep Link Booking URLs
 

@@ -16,7 +16,14 @@ from .notifier import start_background_scheduler
 from deep_links import build_booking_url
 from lookup_venue import parse_opentable_url, parse_resy_url
 from notifiers import get_notifier
-from resy_api import create_resy_client
+from resy_api import (
+    create_resy_client,
+    ResyBookingError,
+    ResySlotUnavailableError,
+    ResyPaymentError,
+    ResyAuthError,
+    ResyTimeoutError,
+)
 
 load_dotenv()
 
@@ -229,6 +236,8 @@ def get_settings():
         "NOTIFY_VIA_PUSH",
         "RESY_API_KEY",
         "RESY_AUTH_TOKEN",
+        "AUTO_BOOK",
+        "RESY_PAYMENT_METHOD_ID",
     ]
     return jsonify({key: env.get(key, "") for key in keys})
 
@@ -275,6 +284,104 @@ def restaurant_deep_link(restaurant_id: int):
     slot = {"date": date, "time": time_str, "party_size": party_size}
     urls = build_booking_url(restaurant["source"], restaurant, slot)
     return jsonify(urls)
+
+
+@app.route("/api/restaurants/<int:restaurant_id>/book", methods=["POST"])
+def book_restaurant(restaurant_id: int):
+    restaurant = db.get_restaurant(restaurant_id)
+    if not restaurant:
+        return jsonify({"success": False, "message": "Restaurant not found.", "data": {}}), 404
+
+    if restaurant.get("source") != "resy":
+        return jsonify({"success": False, "message": "One-tap booking is only supported for Resy restaurants.", "data": {}}), 400
+
+    venue_id = restaurant.get("resy_venue_id")
+    if not venue_id:
+        return jsonify({"success": False, "message": "No Resy venue ID configured for this restaurant.", "data": {}}), 400
+
+    payload = request.get_json(force=True)
+    date = payload.get("date")
+    time_str = payload.get("time")
+    party_size = payload.get("party_size")
+
+    if not all([date, time_str, party_size]):
+        return jsonify({"success": False, "message": "date, time, and party_size are required.", "data": {}}), 400
+
+    client = create_resy_client()
+    try:
+        details = client.get_booking_details(venue_id, date, time_str, int(party_size))
+        confirmation = client.book_reservation(details["config_id"], details["payment_method_id"])
+        resy_token = confirmation["resy_token"]
+
+        booking_id = db.add_booking({
+            "restaurant_id": restaurant_id,
+            "venue_id": venue_id,
+            "date": date,
+            "time": time_str,
+            "party_size": int(party_size),
+            "resy_token": resy_token,
+            "status": "confirmed",
+        })
+        db.add_activity_log(
+            f"✅ Booked! {restaurant['name']}: {date} {time_str}, Table for {party_size} — Token: {resy_token}",
+            "info",
+            highlight=True,
+        )
+        return jsonify({
+            "success": True,
+            "message": f"Booked! Confirmation: {resy_token}",
+            "data": {
+                "booking_id": booking_id,
+                "resy_token": resy_token,
+                "restaurant": restaurant["name"],
+                "date": date,
+                "time": time_str,
+                "party_size": int(party_size),
+            },
+        })
+
+    except ResySlotUnavailableError as e:
+        db.add_booking({"restaurant_id": restaurant_id, "venue_id": venue_id, "date": date, "time": time_str, "party_size": int(party_size), "status": "failed"})
+        db.add_activity_log(f"❌ Booking failed — {restaurant['name']}: {e}", "error")
+        return jsonify({"success": False, "message": str(e), "data": {}}), 409
+    except ResyPaymentError as e:
+        return jsonify({"success": False, "message": str(e), "data": {}}), 402
+    except ResyAuthError as e:
+        return jsonify({"success": False, "message": str(e), "data": {}}), 401
+    except ResyTimeoutError as e:
+        return jsonify({"success": False, "message": str(e), "data": {}}), 504
+    except ResyBookingError as e:
+        db.add_activity_log(f"❌ Booking failed — {restaurant['name']}: {e}", "error")
+        return jsonify({"success": False, "message": str(e), "data": {}}), 400
+
+
+@app.route("/api/bookings", methods=["GET"])
+def list_bookings():
+    return jsonify({"success": True, "data": db.get_bookings()})
+
+
+@app.route("/api/bookings/<int:booking_id>", methods=["DELETE"])
+def cancel_booking_endpoint(booking_id: int):
+    booking = db.cancel_booking(booking_id)
+    if not booking:
+        return jsonify({"success": False, "message": "Booking not found.", "data": {}}), 404
+    if booking.get("status") == "cancelled":
+        return jsonify({"success": False, "message": "Booking is already cancelled.", "data": {}}), 409
+
+    resy_token = booking.get("resy_token")
+    if resy_token:
+        try:
+            create_resy_client().cancel_reservation(resy_token)
+        except ResyBookingError as e:
+            db.add_activity_log(f"⚠️ Resy cancel API failed for token {resy_token}: {e}", "warning")
+
+    restaurant = db.get_restaurant(booking["restaurant_id"])
+    name = restaurant["name"] if restaurant else "Unknown"
+    db.add_activity_log(
+        f"🚫 Booking cancelled — {name}: {booking['date']} {booking['time']}, Table for {booking['party_size']}",
+        "info",
+    )
+    return jsonify({"success": True, "message": "Booking cancelled.", "data": {}})
 
 
 @app.route("/api/check-now", methods=["POST"])

@@ -18,6 +18,14 @@ from app.availability import (
 )
 from deep_links import build_booking_url
 from notifiers import get_notifier
+from resy_api import (
+    create_resy_client,
+    ResyBookingError,
+    ResySlotUnavailableError,
+    ResyPaymentError,
+    ResyAuthError,
+    ResyTimeoutError,
+)
 
 load_dotenv()
 
@@ -25,6 +33,9 @@ logger = logging.getLogger(__name__)
 
 last_check_time: datetime | None = None
 _check_lock = threading.Lock()
+
+_auto_book_cooldowns: dict[str, float] = {}
+_COOLDOWN_SECONDS = 60
 
 
 def is_check_running() -> bool:
@@ -100,6 +111,8 @@ def check_restaurant(restaurant: dict) -> None:
                     "debug",
                 )
 
+            auto_book = os.getenv("AUTO_BOOK", "false").lower() == "true"
+
             actually_notified = []
             for slot in new_slots:
                 if (date, slot.time) in notified_this_run:
@@ -116,6 +129,81 @@ def check_restaurant(restaurant: dict) -> None:
                 urls = build_booking_url(source, restaurant, slot_dict)
                 booking_url = urls["web_url"]
 
+                booking_params = None
+                if source == "resy" and restaurant.get("id"):
+                    booking_params = {
+                        "restaurant_id": restaurant["id"],
+                        "venue_id": venue_id,
+                        "date": date,
+                        "time": slot.time,
+                        "party_size": party_size,
+                        "source": "resy",
+                    }
+
+                auto_booked = False
+                if auto_book and source == "resy":
+                    now_ts = time.time()
+                    last_attempt = _auto_book_cooldowns.get(venue_id, 0)
+                    if now_ts - last_attempt < _COOLDOWN_SECONDS:
+                        db.add_activity_log(
+                            f"⏱ Auto-book skipped (cooldown) — {restaurant['name']} {date} {slot.time}",
+                            "debug",
+                        )
+                    else:
+                        _auto_book_cooldowns[venue_id] = now_ts
+                        db.add_activity_log(
+                            f"🤖 Auto-book attempt — {restaurant['name']}: {date} {slot.time}, Table for {party_size}",
+                            "info",
+                        )
+                        try:
+                            client = create_resy_client()
+                            details = client.get_booking_details(venue_id, date, slot.time, party_size)
+                            confirmation = client.book_reservation(
+                                details["config_id"], details["payment_method_id"]
+                            )
+                            resy_token = confirmation["resy_token"]
+                            db.add_booking({
+                                "restaurant_id": restaurant.get("id"),
+                                "venue_id": venue_id,
+                                "date": date,
+                                "time": slot.time,
+                                "party_size": party_size,
+                                "resy_token": resy_token,
+                                "status": "confirmed",
+                            })
+                            auto_booked = True
+                            booked_msg = f"✅ Booked! {restaurant['name']}: {date} {slot.time}, Table for {party_size} — Confirmation: {resy_token}"
+                            db.add_activity_log(booked_msg, "info", highlight=True)
+                            notifier.send(
+                                restaurant["name"],
+                                {**slot_dict, "auto_booked": True, "resy_token": resy_token},
+                                urls,
+                            )
+                        except ResySlotUnavailableError as e:
+                            db.add_activity_log(
+                                f"⚠️ Auto-book failed (slot gone) — {restaurant['name']}: {e}", "warning"
+                            )
+                        except ResyPaymentError as e:
+                            db.add_activity_log(
+                                f"⚠️ Auto-book failed (payment) — {restaurant['name']}: {e}", "warning"
+                            )
+                        except ResyAuthError as e:
+                            db.add_activity_log(
+                                f"⚠️ Auto-book failed (auth) — {restaurant['name']}: {e}", "warning"
+                            )
+                        except ResyTimeoutError as e:
+                            db.add_activity_log(
+                                f"⚠️ Auto-book failed (timeout) — {restaurant['name']}: {e}", "warning"
+                            )
+                        except ResyBookingError as e:
+                            db.add_activity_log(
+                                f"⚠️ Auto-book failed — {restaurant['name']}: {e}", "warning"
+                            )
+
+                if auto_booked:
+                    actually_notified.append(slot)
+                    continue
+
                 push_ok = push_enabled and notifier.send(restaurant["name"], slot_dict, urls)
 
                 if push_ok:
@@ -124,12 +212,14 @@ def check_restaurant(restaurant: dict) -> None:
                         "info",
                         highlight=True,
                         url=booking_url,
+                        booking_params=booking_params,
                     )
                 elif push_enabled:
                     db.add_activity_log(
                         f"❌ Notification failed · push — {restaurant['name']}: {date} {slot.time}",
                         "error",
                         url=booking_url,
+                        booking_params=booking_params,
                     )
                 else:
                     db.add_activity_log(
@@ -137,6 +227,7 @@ def check_restaurant(restaurant: dict) -> None:
                         "info",
                         highlight=True,
                         url=booking_url,
+                        booking_params=booking_params,
                     )
                 actually_notified.append(slot)
 

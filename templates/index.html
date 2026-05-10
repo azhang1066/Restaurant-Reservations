@@ -80,6 +80,16 @@
         <div id="activity-log" class="log-list"></div>
       </section>
 
+      <section class="panel panel-bookings">
+        <div class="section-header">
+          <h2>Bookings</h2>
+          <span id="bookings-count">0 bookings</span>
+        </div>
+        <div id="bookings-list" class="bookings-list">
+          <p class="empty-state">No bookings yet. Use "Book via Resy" on a slot or enable Auto-Book.</p>
+        </div>
+      </section>
+
       <section class="panel panel-settings">
         <h2>Notification Settings</h2>
         <form id="settings-form">
@@ -128,6 +138,21 @@
                 <input type="checkbox" id="notify-via-email" />
                 Email notifications
               </label>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h3>Auto-Book</h3>
+            <div class="toggle-row">
+              <label class="toggle-label">
+                <input type="checkbox" id="auto-book" />
+                Auto-Book (off by default)
+              </label>
+            </div>
+            <p class="auto-book-warning">⚠️ <strong>Use with caution.</strong> When enabled, the first available slot matching your watchlist will be booked automatically using your Resy credentials — without any confirmation prompt. A credit card must be on file in your Resy account.</p>
+            <div class="form-group" style="margin-top:12px;">
+              <label for="resy-payment-method-id">Payment Method ID override <small>(optional — leave blank to use your default Resy card)</small></label>
+              <input id="resy-payment-method-id" type="text" placeholder="Leave blank to use Resy default" />
             </div>
           </div>
 

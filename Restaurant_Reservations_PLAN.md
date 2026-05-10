@@ -91,11 +91,32 @@ Key architectural decisions:
 - API validation: `party_sizes` must be a non-empty list of integers 1–20
 - Chip-style party size UI: ordinal labels (1st/2nd/3rd), ↑/↓ reorder, × remove
 
+### Stage 9 — One-Tap Resy Booking ✅
+- **`resy_api.py`** — 5 exception classes (`ResyBookingError`, `ResySlotUnavailableError`, `ResyPaymentError`, `ResyAuthError`, `ResyTimeoutError`); 3 new `ResyAPIClient` methods:
+  - `get_booking_details(venue_id, date, time, party_size)` → `GET /3/details`, returns `config_id` + `payment_method_id`; respects `RESY_PAYMENT_METHOD_ID` env override; raises `ResyPaymentError` if no card on file
+  - `book_reservation(config_id, payment_method_id)` → `POST /3/book`, returns `resy_token`
+  - `cancel_reservation(resy_token)` → `DELETE /3/reservation`
+- **`app/db.py`** — `bookings` table (`id, restaurant_id, venue_id, date, time, party_size, resy_token, status, booked_at`) added to both `init_db()` and as migration #6 (idempotent `CREATE TABLE IF NOT EXISTS`); `booking_params TEXT` column added to `activity_log` as migration #7; `add_booking()`, `get_bookings()` (LEFT JOIN for restaurant name), `cancel_booking()` functions added; `add_activity_log()` accepts optional `booking_params` dict; `get_recent_logs()` deserializes it
+- **`app/app.py`** — `POST /api/restaurants/<id>/book` (3-step Resy flow, writes to bookings table, structured JSON response); `GET /api/bookings`; `DELETE /api/bookings/<id>` (calls Resy cancel API, updates DB status); `AUTO_BOOK` and `RESY_PAYMENT_METHOD_ID` exposed in settings GET/POST
+- **`app/notifier.py`** — module-level `_auto_book_cooldowns: dict[str, float]` + 60-second `_COOLDOWN_SECONDS`; when `AUTO_BOOK=true`: re-calls `/3/details` (fresh slot check), enforces cooldown, attempts booking, pushes "✅ Booked!" on success; falls through to normal notification on any failure (never silent); `booking_params` JSON stored on every Resy slot-found log entry
+- **`templates/index.html`** — Bookings panel (5th, full-width); Auto-Book toggle with yellow warning box + `RESY_PAYMENT_METHOD_ID` override field in Notification Settings
+- **`static/app.js`** — `bookReservation()` (POST, loading state, toast); `cancelBooking()` (confirm dialog, DELETE); `loadBookings()` (table with status badges and Cancel buttons); `showToast()` (animated corner toast); "Book via Resy" button on log entries with `booking_params`; `loadSettings`/`saveSettings` wired to two new fields; `loadBookings()` called on init and after any book/cancel action
+- **`static/style.css`** — bookings table styles, `.status-badge` variants (confirmed/cancelled/failed), `.btn-cancel-booking`, `.btn-book-inline`, `.auto-book-warning`, toast animation
+
 ---
 
 ## Completed This Session
 
 **Session date:** 2026-05-10
+
+### One-tap Resy booking (Stage 9)
+
+See Stage 9 above for full details. Key design decisions made this session:
+- Three-call booking sequence (`/3/details` → `/3/book` → optional `/3/reservation` DELETE) implemented exactly as specified; no calls are combined or skipped
+- `booking_params` stored as JSON on activity log entries (migration #7) rather than parsing log message text — lets the frontend attach a "Book via Resy" button to the exact slot without fragile string parsing
+- `CREATE TABLE IF NOT EXISTS bookings` appears in both `init_db()` (for fresh DBs) and migration #6 (for existing DBs); the fresh-DB stamp-to-target path already skips migration execution, so having both is the correct pattern
+- Auto-book cooldown is per `venue_id` (not per slot) to prevent hammering a single restaurant on rapid fluctuations
+- Failed auto-book always falls through to the normal availability notification — the user is never left unaware of a slot
 
 ### Help / How To Use page
 
@@ -206,16 +227,23 @@ Key architectural decisions:
 
 ## Next Actions
 
-### Priority 1 — Availability count badge (Stage 7)
+### Priority 1 — End-to-end live test of booking flow
+Run a full cycle with a real Resy restaurant that has open slots and verify:
+- `GET /3/details` returns a valid `config_id` and `payment_method_id`
+- `POST /3/book` completes and returns a `resy_token`
+- Booking appears in the Bookings panel with status `confirmed`
+- Cancel button calls `DELETE /3/reservation` and updates status to `cancelled`
+- Auto-book fires correctly with `AUTO_BOOK=true` and the cooldown is respected
+- Failed booking falls through to normal push notification
+
+### Priority 2 — Availability count badge (Stage 7)
 Add a small badge to each watchlist card showing the number of available slots found in the last check. Requires storing the latest slot count per restaurant (e.g. a `last_slot_count` column or in-memory dict) and surfacing it via the `/api/restaurants` response.
 
-### Priority 2 — End-to-end live test
-Run a full check cycle with a real Resy and OpenTable restaurant; verify:
-- Availability API returns slots
-- Deep links open the correct pre-filled booking page
-- Push notifications fire and the tap target URL is correct
-- Deduplication suppresses repeat notifications correctly
-- Run `--discover-locations` with fresh credentials to populate `_LOCATION_IDS`
+### Priority 3 — Help page update
+Update `templates/help.html` to document the new Bookings panel, the "Book via Resy" button, and the Auto-Book toggle (including the credit card requirement and cooldown behaviour).
 
-### Priority 3 — Unit tests
-Add tests for `deep_links.py` (URL construction, fallback logic) and `notifiers/` (send payloads).
+### Priority 4 — Unit tests
+Add tests for:
+- `resy_api.py` booking methods (mock HTTP responses for `/3/details`, `/3/book`, `/3/reservation`)
+- `deep_links.py` URL construction and fallback logic
+- `notifiers/` send payloads

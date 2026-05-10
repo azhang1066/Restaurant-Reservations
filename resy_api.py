@@ -4,6 +4,7 @@ Resy API client module — availability checks, venue ID lookup, location_id aut
 OpenTable client lives in opentable_api.py.
 """
 
+import json as _json
 import logging
 import os
 import threading
@@ -12,6 +13,26 @@ from datetime import datetime
 from typing import Optional
 
 import requests
+
+
+class ResyBookingError(Exception):
+    """Base class for all Resy booking failures."""
+
+
+class ResySlotUnavailableError(ResyBookingError):
+    """The requested slot is no longer available."""
+
+
+class ResyPaymentError(ResyBookingError):
+    """No valid payment method on file."""
+
+
+class ResyAuthError(ResyBookingError):
+    """Auth token is expired or invalid."""
+
+
+class ResyTimeoutError(ResyBookingError):
+    """Resy API did not respond in time."""
 
 logger = logging.getLogger(__name__)
 
@@ -411,6 +432,168 @@ class ResyAPIClient:
         except Exception as e:
             logger.error(f"Error checking availability: {e}")
             return []
+
+
+    def get_booking_details(
+        self, venue_id: str, date: str, time: str, party_size: int
+    ) -> dict:
+        """
+        GET /3/details — confirm a slot is still open and retrieve the booking config.
+
+        Returns {"config_id": str, "payment_method_id": int|str}.
+        Raises ResySlotUnavailableError, ResyPaymentError, ResyAuthError, ResyTimeoutError.
+        """
+        start = f"{date} {time}:00"
+        try:
+            response = requests.get(
+                f"{self.BASE_URL}/3/details",
+                headers=self._get_headers(),
+                params={
+                    "venue_id": venue_id,
+                    "day": date,
+                    "party_size": party_size,
+                    "type": "Dining",
+                    "start": start,
+                },
+                timeout=15,
+            )
+        except requests.exceptions.Timeout:
+            raise ResyTimeoutError(
+                "Resy didn't respond in time — will retry on the next check cycle"
+            )
+
+        if response.status_code == 401:
+            raise ResyAuthError(
+                "Your Resy session has expired — update RESY_API_KEY in Settings"
+            )
+        if response.status_code == 404:
+            raise ResySlotUnavailableError(
+                "That slot was just taken — keeping watch for the next one"
+            )
+
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError:
+            try:
+                err = response.json()
+                msg = err.get("message") or err.get("error") or f"HTTP {response.status_code}"
+            except Exception:
+                msg = f"HTTP {response.status_code}"
+            raise ResyBookingError(msg)
+
+        data = response.json()
+
+        book_token = data.get("book_token", {})
+        config_id = book_token.get("value") if isinstance(book_token, dict) else book_token
+        if not config_id:
+            raise ResySlotUnavailableError(
+                "That slot was just taken — keeping watch for the next one"
+            )
+
+        payment = data.get("payment", {})
+        payment_method_id = payment.get("id") if isinstance(payment, dict) else None
+
+        env_override = os.getenv("RESY_PAYMENT_METHOD_ID")
+        if env_override:
+            try:
+                payment_method_id = int(env_override)
+            except ValueError:
+                payment_method_id = env_override
+
+        if payment_method_id is None:
+            raise ResyPaymentError(
+                "Add a credit card to your Resy account before enabling auto-book"
+            )
+
+        return {"config_id": config_id, "payment_method_id": payment_method_id}
+
+    def book_reservation(self, config_id: str, payment_method_id) -> dict:
+        """
+        POST /3/book — complete the reservation using the config from get_booking_details.
+
+        Returns {"resy_token": str, "reservation_id": any, "confirmation_message": str}.
+        Raises ResySlotUnavailableError, ResyAuthError, ResyTimeoutError, ResyBookingError.
+        """
+        struct_payment = _json.dumps({"id": payment_method_id, "type": "stored"})
+        try:
+            response = requests.post(
+                f"{self.BASE_URL}/3/book",
+                headers=self._get_headers(),
+                data={
+                    "book_token": config_id,
+                    "struct_payment_method": struct_payment,
+                    "source_id": "resy.com-venue-details",
+                },
+                timeout=15,
+            )
+        except requests.exceptions.Timeout:
+            raise ResyTimeoutError(
+                "Resy didn't respond in time — will retry on the next check cycle"
+            )
+
+        if response.status_code == 401:
+            raise ResyAuthError(
+                "Your Resy session has expired — update RESY_API_KEY in Settings"
+            )
+
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError:
+            try:
+                err = response.json()
+                msg = err.get("message") or err.get("error") or f"HTTP {response.status_code}"
+            except Exception:
+                msg = f"HTTP {response.status_code}"
+            if any(x in msg.lower() for x in ("no longer available", "unavailable", "not available")):
+                raise ResySlotUnavailableError(
+                    "That slot was just taken — keeping watch for the next one"
+                )
+            raise ResyBookingError(msg)
+
+        data = response.json()
+        resy_token = data.get("resy_token") or data.get("reservation_id")
+        if not resy_token:
+            raise ResyBookingError("Booking succeeded but no confirmation token received")
+
+        return {
+            "resy_token": str(resy_token),
+            "reservation_id": data.get("reservation_id"),
+            "confirmation_message": f"Booked! Confirmation: {resy_token}",
+        }
+
+    def cancel_reservation(self, resy_token: str) -> bool:
+        """
+        DELETE /3/reservation — cancel a previously booked reservation.
+
+        Returns True on success.
+        Raises ResyAuthError, ResyTimeoutError, ResyBookingError on failure.
+        """
+        try:
+            response = requests.delete(
+                f"{self.BASE_URL}/3/reservation",
+                headers=self._get_headers(),
+                data={"resy_token": resy_token},
+                timeout=15,
+            )
+            response.raise_for_status()
+            return True
+        except requests.exceptions.Timeout:
+            raise ResyTimeoutError(
+                "Resy didn't respond in time — will retry on the next check cycle"
+            )
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                raise ResyAuthError(
+                    "Your Resy session has expired — update RESY_API_KEY in Settings"
+                )
+            try:
+                err = e.response.json()
+                msg = err.get("message") or err.get("error") or f"HTTP {e.response.status_code}"
+            except Exception:
+                msg = f"HTTP {e.response.status_code}"
+            raise ResyBookingError(msg)
+        except Exception as e:
+            raise ResyBookingError(str(e))
 
 
 def create_resy_client(

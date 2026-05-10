@@ -25,6 +25,8 @@ _MIGRATIONS: List[str] = [
     "ALTER TABLE restaurants ADD COLUMN resy_city TEXT",         # 3
     "ALTER TABLE restaurants ADD COLUMN opentable_slug TEXT",    # 4
     "ALTER TABLE activity_log ADD COLUMN url TEXT",              # 5
+    "CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, restaurant_id INTEGER NOT NULL, venue_id TEXT NOT NULL, date TEXT NOT NULL, time TEXT NOT NULL, party_size INTEGER NOT NULL, resy_token TEXT, status TEXT NOT NULL DEFAULT 'confirmed', booked_at TEXT NOT NULL)",  # 6
+    "ALTER TABLE activity_log ADD COLUMN booking_params TEXT",   # 7
 ]
 
 
@@ -79,7 +81,23 @@ def init_db() -> sqlite3.Connection:
                 level TEXT NOT NULL,
                 message TEXT NOT NULL,
                 highlight INTEGER NOT NULL DEFAULT 0,
-                url TEXT
+                url TEXT,
+                booking_params TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bookings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                restaurant_id INTEGER NOT NULL,
+                venue_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                time TEXT NOT NULL,
+                party_size INTEGER NOT NULL,
+                resy_token TEXT,
+                status TEXT NOT NULL DEFAULT 'confirmed',
+                booked_at TEXT NOT NULL
             )
             """
         )
@@ -244,13 +262,15 @@ def add_activity_log(
     level: str = "info",
     highlight: bool = False,
     url: Optional[str] = None,
+    booking_params: Optional[Dict[str, Any]] = None,
 ) -> None:
     conn = get_connection()
     now = datetime.utcnow().isoformat()
+    booking_params_json = json.dumps(booking_params) if booking_params else None
     with conn:
         conn.execute(
-            "INSERT INTO activity_log (timestamp, level, message, highlight, url) VALUES (?, ?, ?, ?, ?)",
-            (now, level, message, int(highlight), url),
+            "INSERT INTO activity_log (timestamp, level, message, highlight, url, booking_params) VALUES (?, ?, ?, ?, ?, ?)",
+            (now, level, message, int(highlight), url, booking_params_json),
         )
         conn.execute(
             "DELETE FROM activity_log WHERE id NOT IN (SELECT id FROM activity_log ORDER BY id DESC LIMIT 500)"
@@ -260,10 +280,19 @@ def add_activity_log(
 def get_recent_logs(limit: int = 50) -> List[Dict[str, Any]]:
     conn = get_connection()
     cursor = conn.execute(
-        "SELECT timestamp, level, message, highlight, url FROM activity_log ORDER BY id DESC LIMIT ?",
+        "SELECT timestamp, level, message, highlight, url, booking_params FROM activity_log ORDER BY id DESC LIMIT ?",
         (limit,),
     )
-    return [dict(row) for row in cursor.fetchall()][::-1]
+    rows = []
+    for row in cursor.fetchall():
+        d = dict(row)
+        if d.get("booking_params"):
+            try:
+                d["booking_params"] = json.loads(d["booking_params"])
+            except Exception:
+                d["booking_params"] = None
+        rows.append(d)
+    return rows[::-1]
 
 
 def ensure_migrated(config_restaurants: List[Dict[str, Any]]) -> None:
@@ -322,6 +351,55 @@ def add_notified_slot(venue_id: str, date: str, time: str, party_size: int) -> N
             "INSERT OR IGNORE INTO notified_slots (venue_id, date, time, party_size, notified_at) VALUES (?, ?, ?, ?, ?)",
             (venue_id, date, time, party_size, now),
         )
+
+
+def add_booking(booking: Dict[str, Any]) -> int:
+    conn = get_connection()
+    now = datetime.utcnow().isoformat()
+    with conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO bookings (restaurant_id, venue_id, date, time, party_size, resy_token, status, booked_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                booking["restaurant_id"],
+                booking["venue_id"],
+                booking["date"],
+                booking["time"],
+                booking["party_size"],
+                booking.get("resy_token"),
+                booking.get("status", "confirmed"),
+                now,
+            ),
+        )
+    return cursor.lastrowid
+
+
+def get_bookings() -> List[Dict[str, Any]]:
+    conn = get_connection()
+    cursor = conn.execute(
+        """
+        SELECT b.id, b.restaurant_id, b.venue_id, b.date, b.time, b.party_size,
+               b.resy_token, b.status, b.booked_at, r.name as restaurant_name
+        FROM bookings b
+        LEFT JOIN restaurants r ON b.restaurant_id = r.id
+        ORDER BY b.booked_at DESC
+        """
+    )
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def cancel_booking(booking_id: int) -> Optional[Dict[str, Any]]:
+    """Mark a booking cancelled. Returns the booking's state before update, or None if not found."""
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,)).fetchone()
+    if not row:
+        return None
+    booking = dict(row)
+    with conn:
+        conn.execute("UPDATE bookings SET status = 'cancelled' WHERE id = ?", (booking_id,))
+    return booking
 
 
 def remove_stale_notified_slots(

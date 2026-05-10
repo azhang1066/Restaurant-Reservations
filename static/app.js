@@ -304,6 +304,113 @@ async function loadRestaurants() {
   });
 }
 
+async function bookReservation(restaurantId, date, time, partySize, btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Booking…";
+  }
+  try {
+    const response = await fetch(`/api/restaurants/${restaurantId}/book`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, time, party_size: partySize }),
+    });
+    const json = await response.json();
+    if (json.success) {
+      showToast(`✅ Booked! Confirmation: ${json.data.resy_token}`, "success");
+      loadBookings();
+      loadLogs();
+    } else {
+      showToast(`❌ ${json.message}`, "error");
+    }
+  } catch {
+    showToast("❌ Booking request failed — check your connection.", "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Book via Resy";
+    }
+  }
+}
+
+async function cancelBooking(bookingId, restaurantName, date) {
+  if (!confirm(`Cancel your reservation at ${restaurantName} on ${date}?`)) return;
+  const response = await fetch(`/api/bookings/${bookingId}`, { method: "DELETE" });
+  const json = await response.json();
+  if (json.success) {
+    showToast("Reservation cancelled.", "success");
+    loadBookings();
+    loadLogs();
+  } else {
+    showToast(`❌ ${json.message}`, "error");
+  }
+}
+
+function showToast(message, type = "success") {
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add("toast-visible"));
+  setTimeout(() => {
+    toast.classList.remove("toast-visible");
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
+async function loadBookings() {
+  const data = await apiFetch("/api/bookings");
+  const bookings = data.data || [];
+  const container = document.getElementById("bookings-list");
+  const countEl = document.getElementById("bookings-count");
+  countEl.textContent = `${bookings.length} booking${bookings.length !== 1 ? "s" : ""}`;
+
+  if (!bookings.length) {
+    container.innerHTML = '<p class="empty-state">No bookings yet. Use "Book via Resy" on a slot or enable Auto-Book.</p>';
+    return;
+  }
+
+  const table = document.createElement("table");
+  table.className = "bookings-table";
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Restaurant</th>
+        <th>Date</th>
+        <th>Time</th>
+        <th>Party</th>
+        <th>Confirmation</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+  `;
+  const tbody = document.createElement("tbody");
+  bookings.forEach((b) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${b.restaurant_name || "—"}</td>
+      <td>${b.date}</td>
+      <td>${b.time}</td>
+      <td>${b.party_size}</td>
+      <td class="token-cell">${b.resy_token || "—"}</td>
+      <td><span class="status-badge status-${b.status}">${b.status}</span></td>
+      <td></td>
+    `;
+    if (b.status === "confirmed") {
+      const btn = document.createElement("button");
+      btn.className = "button btn-cancel-booking";
+      btn.textContent = "Cancel";
+      btn.addEventListener("click", () => cancelBooking(b.id, b.restaurant_name || "restaurant", b.date));
+      tr.querySelector("td:last-child").appendChild(btn);
+    }
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  container.innerHTML = "";
+  container.appendChild(table);
+}
+
 async function loadLogs() {
   const logs = await apiFetch("/api/logs");
   elements.activityLog.innerHTML = "";
@@ -328,6 +435,17 @@ async function loadLogs() {
       link.className = "book-now-link";
       link.textContent = "Book Now →";
       item.appendChild(link);
+    }
+
+    if (log.booking_params && log.booking_params.source === "resy") {
+      const p = log.booking_params;
+      const bookBtn = document.createElement("button");
+      bookBtn.className = "button btn-book-inline";
+      bookBtn.textContent = "Book via Resy";
+      bookBtn.addEventListener("click", () =>
+        bookReservation(p.restaurant_id, p.date, p.time, p.party_size, bookBtn)
+      );
+      item.appendChild(bookBtn);
     }
 
     elements.activityLog.appendChild(item);
@@ -364,6 +482,8 @@ async function loadSettings() {
   document.getElementById("from-email").value = settings.FROM_EMAIL || "";
   document.getElementById("resy-api-key").value = settings.RESY_API_KEY || "";
   document.getElementById("resy-auth-token").value = settings.RESY_AUTH_TOKEN || "";
+  document.getElementById("auto-book").checked = (settings.AUTO_BOOK || "false") === "true";
+  document.getElementById("resy-payment-method-id").value = settings.RESY_PAYMENT_METHOD_ID || "";
 
   handleProviderChange();
   updateNtfySubscribeUrl();
@@ -476,6 +596,8 @@ async function saveSettings(event) {
     FROM_EMAIL: document.getElementById("from-email").value.trim(),
     RESY_API_KEY: document.getElementById("resy-api-key").value.trim(),
     RESY_AUTH_TOKEN: document.getElementById("resy-auth-token").value.trim(),
+    AUTO_BOOK: document.getElementById("auto-book").checked ? "true" : "false",
+    RESY_PAYMENT_METHOD_ID: document.getElementById("resy-payment-method-id").value.trim(),
   };
   await apiFetch("/api/settings", { method: "POST", body: JSON.stringify(payload) });
   showMessage(elements.settingsMessage, "Settings saved.", "success");
@@ -538,6 +660,7 @@ async function initialize() {
   handleSourceChange();
   loadRestaurants();
   loadLogs();
+  loadBookings();
   loadSettings();
   loadStatus();
 
