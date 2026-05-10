@@ -74,6 +74,11 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/help")
+def help_page():
+    return render_template("help.html")
+
+
 @app.route("/api/restaurants", methods=["GET"])
 def list_restaurants():
     return jsonify(db.get_restaurants())

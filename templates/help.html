@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Help — Restaurant Notifier</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .help-layout {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: 220px 1fr;
+      align-items: start;
+    }
+
+    .help-toc {
+      position: sticky;
+      top: 24px;
+    }
+
+    .help-toc ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 4px;
+    }
+
+    .help-toc li a {
+      display: block;
+      padding: 8px 12px;
+      border-radius: 10px;
+      color: #9ca3af;
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .help-toc li a:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #e5e7eb;
+    }
+
+    .help-body {
+      display: grid;
+      gap: 20px;
+    }
+
+    .help-section {
+      scroll-margin-top: 24px;
+    }
+
+    .help-section h2 {
+      margin: 0 0 16px;
+      font-size: 1.15rem;
+    }
+
+    .help-section h3 {
+      margin: 20px 0 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+    }
+
+    .help-section p,
+    .help-section li {
+      color: #cbd5e1;
+      line-height: 1.65;
+      font-size: 0.95rem;
+    }
+
+    .help-section ul,
+    .help-section ol {
+      margin: 8px 0 0;
+      padding-left: 20px;
+      display: grid;
+      gap: 6px;
+    }
+
+    code {
+      font-family: "Cascadia Code", "Fira Code", ui-monospace, monospace;
+      font-size: 0.88em;
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: rgba(99, 102, 241, 0.12);
+      color: #c7d2fe;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+
+    .cmd-block {
+      display: block;
+      width: 100%;
+      margin: 10px 0;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      color: #a5f3fc;
+      font-family: "Cascadia Code", "Fira Code", ui-monospace, monospace;
+      font-size: 0.88rem;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .log-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.92rem;
+    }
+
+    .log-table th {
+      text-align: left;
+      padding: 8px 12px;
+      color: #64748b;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .log-table td {
+      padding: 10px 12px;
+      color: #cbd5e1;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      vertical-align: top;
+    }
+
+    .log-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .callout {
+      display: grid;
+      gap: 6px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(251, 191, 36, 0.06);
+      border: 1px solid rgba(251, 191, 36, 0.18);
+      color: #fde68a;
+      font-size: 0.92rem;
+      margin-top: 12px;
+    }
+
+    .callout strong {
+      color: #fbbf24;
+    }
+
+    @media (max-width: 860px) {
+      .help-layout {
+        grid-template-columns: 1fr;
+      }
+      .help-toc {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="app-header">
+      <div>
+        <h1>Help / How To Use</h1>
+        <p>Everything you need to get up and running with Restaurant Notifier.</p>
+      </div>
+      <a href="/" class="button button-secondary">← Back to Dashboard</a>
+    </header>
+
+    <div class="help-layout">
+
+      <!-- Table of Contents -->
+      <nav class="panel help-toc" aria-label="Page sections">
+        <ul>
+          <li><a href="#getting-started">Getting Started</a></li>
+          <li><a href="#adding-restaurant">Adding a Restaurant</a></li>
+          <li><a href="#notifications">Notification Setup</a></li>
+          <li><a href="#activity-log">Reading the Activity Log</a></li>
+          <li><a href="#scheduling">Check Scheduling</a></li>
+          <li><a href="#deep-links">Deep Links</a></li>
+          <li><a href="#tips">Tips &amp; Troubleshooting</a></li>
+        </ul>
+      </nav>
+
+      <div class="help-body">
+
+        <!-- Getting Started -->
+        <section id="getting-started" class="panel help-section">
+          <h2>Getting Started</h2>
+
+          <h3>Prerequisites</h3>
+          <ul>
+            <li><strong>Python 3.11+</strong> — earlier versions are not tested.</li>
+            <li>A <code>.env</code> file in the project root for credentials and settings. The dashboard writes to it automatically when you save Notification Settings, so you don't need to edit it by hand unless you prefer to.</li>
+            <li>A Resy account (for Resy monitoring) — you'll need your API key and auth token from your browser's developer tools.</li>
+          </ul>
+
+          <h3>Running the dashboard</h3>
+          <p>From the project root, either of these commands starts the server:</p>
+          <code class="cmd-block">python -m app
+python run_dashboard.py</code>
+          <p>The dashboard is served at <strong>http://localhost:5000</strong>. On the same local network, you can also open it on your phone using your machine's IP address — for example, <code>http://192.168.1.42:5000</code>.</p>
+        </section>
+
+        <!-- Adding a Restaurant -->
+        <section id="adding-restaurant" class="panel help-section">
+          <h2>Adding a Restaurant</h2>
+
+          <h3>URL resolution</h3>
+          <p>Paste a Resy or OpenTable URL into the <strong>Resy / OpenTable URL</strong> field and click <strong>Resolve URL</strong>. The app parses the URL to extract the venue slug and, for Resy, looks up the numeric venue ID via the API. The form fields below are auto-populated — you normally don't need to touch them.</p>
+
+          <h3>Form fields</h3>
+          <ul>
+            <li><strong>Restaurant Name</strong> — display label in the watchlist. Auto-filled from URL resolution but editable.</li>
+            <li><strong>Platform</strong> — Resy or OpenTable. Auto-selected based on the URL you pasted.</li>
+            <li><strong>Resy Venue ID / OpenTable Restaurant ID</strong> — the numeric ID the API uses to fetch availability. Auto-filled when you resolve a URL with valid Resy credentials set.</li>
+            <li><strong>Party Sizes</strong> — one or more guest counts to search for, entered as chips. Type a number and press <kbd>Enter</kbd> or comma. The first chip is the highest priority (used for the booking deep link when multiple sizes match). Drag the ↑ / ↓ arrows to reorder.</li>
+            <li><strong>Days and Time Ranges</strong> — check the days you want to monitor and set the earliest and latest time for each. Only slots that fall within a window for the correct day of the week are reported.</li>
+          </ul>
+
+          <p>Click <strong>Add Restaurant</strong> to save. The card appears in the Watchlist immediately.</p>
+        </section>
+
+        <!-- Notification Setup -->
+        <section id="notifications" class="panel help-section">
+          <h2>Notification Setup</h2>
+
+          <h3>ntfy (recommended — free, no account)</h3>
+          <p><a href="https://ntfy.sh" style="color:#818cf8">ntfy.sh</a> is an open-source push notification service. There is nothing to sign up for.</p>
+          <ul>
+            <li>A random topic name is generated for you the first time you open the dashboard (e.g. <code>resy-notifier-ab12cd</code>). You can change it to anything you like — just keep it unguessable.</li>
+            <li>To receive notifications on your phone, install the <strong>ntfy app</strong> (iOS or Android), tap <strong>Subscribe to topic</strong>, and enter your topic name — or tap the <strong>Copy link</strong> button in the dashboard and paste it into the app.</li>
+            <li>Notifications include a <strong>Book Now</strong> action that opens the pre-filled booking page.</li>
+          </ul>
+
+          <h3>Pushover (alternative)</h3>
+          <p>Pushover requires a one-time $5 purchase per platform. Create an account at <a href="https://pushover.net" style="color:#818cf8">pushover.net</a>, then create an application to get an <strong>App Token</strong>. Your <strong>User Key</strong> is on the Pushover dashboard home page. Enter both in Notification Settings and select <strong>Pushover</strong> as the provider.</p>
+
+          <h3>Channels</h3>
+          <p>Use the <strong>Push notifications</strong> and <strong>Email notifications</strong> toggles to choose which channels fire. Both can be enabled at once. Email requires SMTP settings to be filled in.</p>
+
+          <h3>Testing</h3>
+          <p>Click <strong>Send test notification</strong> after saving settings. A test alert is sent immediately — confirm it arrives on your device before relying on the monitor.</p>
+        </section>
+
+        <!-- Activity Log -->
+        <section id="activity-log" class="panel help-section">
+          <h2>Reading the Activity Log</h2>
+          <p>The Activity Log shows the result of every check cycle and every notification sent. Entries are pruned to the most recent 500.</p>
+
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th>Icon</th>
+                <th>State</th>
+                <th>Meaning</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>✅</td>
+                <td>sent</td>
+                <td>A new slot was found and a push/email notification was dispatched.</td>
+              </tr>
+              <tr>
+                <td>🔁</td>
+                <td>skipped</td>
+                <td>A slot was found but you were already notified about it in a previous check — no duplicate alert.</td>
+              </tr>
+              <tr>
+                <td>🔍</td>
+                <td>nothing found</td>
+                <td>The availability API returned no slots matching your criteria for this restaurant and check cycle.</td>
+              </tr>
+              <tr>
+                <td>❌</td>
+                <td>failed</td>
+                <td>The API call threw an error. Check your credentials and network connectivity.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>Book Now link</h3>
+          <p>Log entries for sent notifications include a <strong>Book Now →</strong> pill. Clicking it opens the pre-filled booking page for that slot in a new tab — same URL that was sent in the push notification.</p>
+        </section>
+
+        <!-- Check Scheduling -->
+        <section id="scheduling" class="panel help-section">
+          <h2>Check Scheduling</h2>
+
+          <h3>Scheduler status pill</h3>
+          <p>The pill in the top-right of the dashboard header shows when the last automatic check ran and how long until the next one. It refreshes every 30 seconds. While a check is in progress the pill shows <em>Checking…</em>.</p>
+
+          <h3>Check Now</h3>
+          <p>The <strong>Check Now</strong> button triggers an immediate availability check for all enabled restaurants. It is disabled while a check is already running to prevent overlapping requests.</p>
+
+          <h3>Check interval</h3>
+          <p>The interval between automatic checks is controlled by the <code>CHECK_INTERVAL_MINUTES</code> variable in your <code>.env</code> file (default: <strong>20 minutes</strong>). Edit the value there and restart the server to apply the change.</p>
+        </section>
+
+        <!-- Deep Links -->
+        <section id="deep-links" class="panel help-section">
+          <h2>Deep Links</h2>
+
+          <h3>How they work</h3>
+          <p>When a slot is found, the app builds a pre-filled booking URL containing the date, time, and party size:</p>
+          <ul>
+            <li><strong>Resy:</strong> <code>resy.com/cities/{city}/venues/{slug}?date=YYYY-MM-DD&amp;seats=N</code></li>
+            <li><strong>OpenTable:</strong> <code>opentable.com/r/{slug}?covers=N&amp;dateTime=YYYY-MM-DDTHH:MM</code></li>
+          </ul>
+          <p>Before the URL is included in a notification, the app sends a quick HEAD request (2-second timeout) to verify the link is reachable.</p>
+
+          <h3>Fallback behavior</h3>
+          <p>If the HEAD request fails or times out, the notification falls back to the venue's homepage URL instead of a broken deep link.</p>
+
+          <h3>Test Link button</h3>
+          <p>Each watchlist card has a <strong>Test link</strong> button. Clicking it calls <code>/api/restaurants/{id}/deep-link</code> for today's date at 19:00 and your top party size, then opens the resulting URL in a new tab so you can confirm the link lands on the correct booking screen.</p>
+        </section>
+
+        <!-- Tips & Troubleshooting -->
+        <section id="tips" class="panel help-section">
+          <h2>Tips &amp; Troubleshooting</h2>
+
+          <h3>Resy auth token expiry</h3>
+          <p>Resy auth tokens expire periodically (typically every few weeks). Symptoms: all Resy checks log ❌ failed with a 401 error. Fix: log in to resy.com, open DevTools → Network, make any request, find the <code>Authorization</code> header value, and paste the new token into <strong>Resy Credentials → Auth Token</strong> in the dashboard.</p>
+
+          <h3>No slots are found</h3>
+          <ul>
+            <li>Confirm the Resy/OpenTable venue ID is correct — resolve the URL again if unsure.</li>
+            <li>Check that your day/time ranges include the times you expect. Slots outside the window are silently filtered.</li>
+            <li>Party size must match exactly what the restaurant is releasing. Try adding additional party sizes.</li>
+            <li>Some restaurants only release slots at midnight or at a specific time — use Check Now to poll on demand.</li>
+          </ul>
+
+          <h3>Deduplication — why you won't get spammed</h3>
+          <p>Once a notification is sent for a specific slot (venue + date + time + party size), that slot is recorded in the database. Subsequent checks skip it and log 🔁 skipped. If the slot disappears from the API and later reappears — for example because someone cancelled — the record is evicted and you <em>will</em> be notified again.</p>
+
+          <h3>Multi-party-size behavior</h3>
+          <p>When you add more than one party size to a restaurant, each size is checked independently. If the same time slot is available for multiple sizes in one check run, only one notification is sent (the first match wins). Across separate check runs, deduplication applies per party size independently.</p>
+
+          <div class="callout">
+            <strong>Tip:</strong> Order your party sizes by priority — put your preferred guest count first. The first chip is used as the booking link's party size when multiple sizes match the same slot.
+          </div>
+        </section>
+
+      </div><!-- /.help-body -->
+    </div><!-- /.help-layout -->
+
+    <footer class="app-footer">
+      <p>Open <strong>http://localhost:5000</strong> or use your phone on the same WiFi with your machine's IP address.</p>
+    </footer>
+  </div>
+  <!-- No JS required on this page -->
+</body>
+</html>

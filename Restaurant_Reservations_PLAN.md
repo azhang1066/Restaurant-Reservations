@@ -95,6 +95,22 @@ Key architectural decisions:
 
 ## Completed This Session
 
+**Session date:** 2026-05-10
+
+### Help / How To Use page
+
+**`GET /help` route and `templates/help.html`** (2026-05-10)
+- Added `GET /help` route in `app/app.py` that renders `help.html`
+- Added **Help** nav link in `templates/index.html` header controls (left of Check Now)
+- Created `templates/help.html` — fully static, no JS required, mobile-responsive
+- Dark theme reuses existing CSS variables and classes from `style.css`; no new frameworks or CDN deps
+- Sticky two-column layout (TOC sidebar + content) collapses to single column on ≤860 px
+- Sections: Getting Started · Adding a Restaurant · Notification Setup · Reading the Activity Log · Check Scheduling · Deep Links · Tips & Troubleshooting
+
+---
+
+## Previous Sessions
+
 **Session date:** 2026-05-07
 
 ### Architecture cleanup — threading, schema migrations, N+1 query, file split
