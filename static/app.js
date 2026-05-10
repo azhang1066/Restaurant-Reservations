@@ -188,8 +188,8 @@ function renderRestaurantCard(restaurant) {
       <span class="platform-badge">${restaurant.source.toUpperCase()}</span>
     </div>
     <div class="edit-actions">
-      <button class="button button-secondary toggle-btn">${restaurant.enabled ? "On" : "Off"}</button>
-      <button class="button button-secondary delete-btn">Delete</button>
+      <button class="button toggle-switch toggle-btn" aria-pressed="${restaurant.enabled}" aria-label="Toggle monitoring for ${restaurant.name}"><span class="toggle-track"><span class="toggle-thumb"></span><span class="toggle-label-text">${restaurant.enabled ? "On" : "Off"}</span></span></button>
+      <button class="button btn-delete delete-btn">🗑 Delete</button>
       <button class="button button-secondary edit-btn">Edit</button>
       <button class="button button-secondary deep-link-btn" title="Generate a booking link for today">Test link</button>
     </div>

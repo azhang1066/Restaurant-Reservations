@@ -185,6 +185,97 @@ body {
   background: rgba(255,255,255,0.08);
 }
 
+.btn-delete {
+  background: #e53935;
+  border-radius: 6px;
+  padding: 10px 16px;
+  gap: 6px;
+  color: #ffffff;
+  font-weight: 500;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.btn-delete:hover {
+  background: #c62828;
+  transform: translateY(-1px);
+}
+
+.btn-delete:active {
+  background: #b01a1a;
+  transform: none;
+}
+
+/* iOS-style toggle switch — button wrapper keeps .button for mobile touch target + layout */
+.toggle-switch {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  transition: none;
+}
+
+.toggle-switch:hover {
+  background: none;
+  transform: none;
+}
+
+.toggle-switch:focus-visible {
+  outline: none;
+}
+
+.toggle-track {
+  position: relative;
+  width: 64px;
+  height: 28px;
+  border-radius: 999px;
+  background: #e53935;
+  transition: background 0.2s ease;
+  display: block;
+  flex-shrink: 0;
+}
+
+.toggle-switch:focus-visible .toggle-track {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+}
+
+.toggle-switch[aria-pressed="true"] .toggle-track {
+  background: #43a047;
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease;
+  pointer-events: none;
+}
+
+.toggle-switch[aria-pressed="true"] .toggle-thumb {
+  transform: translateX(36px);
+}
+
+.toggle-label-text {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 500;
+  color: #ffffff;
+  line-height: 1;
+  pointer-events: none;
+  right: 10px;
+}
+
+.toggle-switch[aria-pressed="true"] .toggle-label-text {
+  right: auto;
+  left: 10px;
+}
+
 .form-group {
   display: grid;
   gap: 8px;
