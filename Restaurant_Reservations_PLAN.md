@@ -134,7 +134,16 @@ See Stage 9 above for full details. Key design decisions made this session:
 - Created `templates/help.html` — fully static, no JS required, mobile-responsive
 - Dark theme reuses existing CSS variables and classes from `style.css`; no new frameworks or CDN deps
 - Sticky two-column layout (TOC sidebar + content) collapses to single column on ≤860 px
-- Sections: Getting Started · Adding a Restaurant · Notification Setup · Reading the Activity Log · Check Scheduling · Deep Links · Tips & Troubleshooting
+- Sections: Getting Started · Adding a Restaurant · Notification Setup · Reading the Activity Log · Check Scheduling · Bookings & One-Tap Booking · Deep Links · Tips & Troubleshooting
+
+### Help page — Bookings section (Priority 2)
+
+**`templates/help.html`** (2026-05-10)
+- Added **Bookings & One-Tap Booking** section (new 6th section, before Deep Links) with TOC entry
+- Documents the Bookings panel: confirmed/cancelled/failed status badges, Cancel button behaviour, caveat that direct Resy cancellations don't sync back
+- Documents the **Book via Resy** button: 3-step flow (`/3/details` → `/3/book` → toast + panel update), error handling if slot is taken mid-flow
+- Documents **Auto-Book** toggle: what it does, the credit card requirement callout, 60-second per-restaurant cooldown, all five safety guardrails, payment method override field
+- Added **Booking error messages** table in Tips & Troubleshooting (slot taken, no card, expired token, network timeout)
 
 ---
 
@@ -244,10 +253,7 @@ Run a full cycle with a real Resy restaurant that has open slots and verify:
 - Auto-book fires correctly with `AUTO_BOOK=true` and the cooldown is respected
 - Failed booking falls through to normal push notification
 
-### Priority 2 — Help page update
-Update `templates/help.html` to document the new Bookings panel, the "Book via Resy" button, and the Auto-Book toggle (including the credit card requirement and cooldown behaviour).
-
-### Priority 3 — Unit tests
+### Priority 2 — Unit tests
 Add tests for:
 - `resy_api.py` booking methods (mock HTTP responses for `/3/details`, `/3/book`, `/3/reservation`)
 - `deep_links.py` URL construction and fallback logic

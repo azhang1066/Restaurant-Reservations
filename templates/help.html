@@ -179,6 +179,7 @@
           <li><a href="#notifications">Notification Setup</a></li>
           <li><a href="#activity-log">Reading the Activity Log</a></li>
           <li><a href="#scheduling">Check Scheduling</a></li>
+          <li><a href="#bookings">Bookings &amp; One-Tap Booking</a></li>
           <li><a href="#deep-links">Deep Links</a></li>
           <li><a href="#tips">Tips &amp; Troubleshooting</a></li>
         </ul>
@@ -319,6 +320,67 @@ python run_dashboard.py</code>
           <p>Each watchlist card has a <strong>Test link</strong> button. Clicking it calls <code>/api/restaurants/{id}/deep-link</code> for today's date at 19:00 and your top party size, then opens the resulting URL in a new tab so you can confirm the link lands on the correct booking screen.</p>
         </section>
 
+        <!-- Bookings & One-Tap Booking -->
+        <section id="bookings" class="panel help-section">
+          <h2>Bookings &amp; One-Tap Booking</h2>
+
+          <h3>Bookings panel</h3>
+          <p>The fifth dashboard panel lists every reservation booked through the app. Each row shows the restaurant name, date, time, party size, Resy confirmation token, a status badge, and a <strong>Cancel</strong> button.</p>
+
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Meaning</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="color:#4ade80">confirmed</td>
+                <td>Booking was accepted by Resy and is active.</td>
+              </tr>
+              <tr>
+                <td style="color:#94a3b8">cancelled</td>
+                <td>You cancelled via the dashboard — Resy's cancellation endpoint was called and the local record updated.</td>
+              </tr>
+              <tr>
+                <td style="color:#f87171">failed</td>
+                <td>The booking attempt was made but Resy returned an error. No reservation was created.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p>Clicking <strong>Cancel</strong> sends a DELETE to Resy's <code>/3/reservation</code> endpoint and marks the booking cancelled in the local database. Cancellations made directly on Resy's website are not synced back automatically.</p>
+
+          <h3>Book via Resy button</h3>
+          <p>Every slot-found entry in the Activity Log includes a <strong>Book via Resy</strong> button alongside the existing <strong>Book Now →</strong> deep link. Clicking it completes the booking programmatically without leaving the dashboard:</p>
+          <ol>
+            <li>Calls <code>GET /3/details</code> to re-confirm the slot is still available and fetch the booking token.</li>
+            <li>Calls <code>POST /3/book</code> with your saved payment method.</li>
+            <li>Shows a toast with the confirmation token and adds the booking to the Bookings panel.</li>
+          </ol>
+          <p>If the slot is taken between steps 1 and 2 you'll see a clear error message; the app continues watching for the next available slot.</p>
+
+          <h3>Auto-Book toggle</h3>
+          <p>Enable <strong>Auto-Book</strong> in Notification Settings to have the app book the first matching slot automatically the moment it's found — no manual click required. A push notification reading <em>"✅ Booked!"</em> is sent on success.</p>
+
+          <div class="callout">
+            <strong>Warning:</strong> Auto-Book charges your saved Resy payment method without any confirmation prompt. A credit card must be on file on your Resy account or the attempt will abort with an error.
+          </div>
+
+          <h3>Auto-Book safety guardrails</h3>
+          <ul>
+            <li>The slot is re-confirmed via <code>/3/details</code> immediately before booking — stale data is never submitted.</li>
+            <li>If no payment method is on file the attempt aborts and a clear message is written to the Activity Log.</li>
+            <li>A <strong>60-second per-restaurant cooldown</strong> limits attempts to one per minute per venue, preventing repeated charges on rapid slot fluctuations.</li>
+            <li>Every attempt — success or failure — is written to the Activity Log with full details.</li>
+            <li>If booking fails for any reason the normal availability push notification fires as a fallback, so you're never left unaware of a slot.</li>
+          </ul>
+
+          <h3>Payment method override</h3>
+          <p>By default Resy charges whichever card is set as your account default. To pin a specific card, enter its <strong>Payment Method ID</strong> in the <code>RESY_PAYMENT_METHOD_ID</code> field in Notification Settings. Leave it blank to use your account default.</p>
+        </section>
+
         <!-- Tips & Troubleshooting -->
         <section id="tips" class="panel help-section">
           <h2>Tips &amp; Troubleshooting</h2>
@@ -336,6 +398,34 @@ python run_dashboard.py</code>
 
           <h3>Deduplication — why you won't get spammed</h3>
           <p>Once a notification is sent for a specific slot (venue + date + time + party size), that slot is recorded in the database. Subsequent checks skip it and log 🔁 skipped. If the slot disappears from the API and later reappears — for example because someone cancelled — the record is evicted and you <em>will</em> be notified again.</p>
+
+          <h3>Booking error messages</h3>
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th>Situation</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Slot taken before booking completes</td>
+                <td>"That slot was just taken — keeping watch for the next one"</td>
+              </tr>
+              <tr>
+                <td>No card on file</td>
+                <td>"Add a credit card to your Resy account before enabling auto-book"</td>
+              </tr>
+              <tr>
+                <td>Auth token expired</td>
+                <td>"Your Resy session has expired — update RESY_API_KEY in Settings"</td>
+              </tr>
+              <tr>
+                <td>Network timeout</td>
+                <td>"Resy didn't respond in time — will retry on the next check cycle"</td>
+              </tr>
+            </tbody>
+          </table>
 
           <h3>Multi-party-size behavior</h3>
           <p>When you add more than one party size to a restaurant, each size is checked independently. If the same time slot is available for multiple sizes in one check run, only one notification is sent (the first match wins). Across separate check runs, deduplication applies per party size independently.</p>

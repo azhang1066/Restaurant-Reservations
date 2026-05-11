@@ -86,7 +86,7 @@ python run_dashboard.py
 python -m app
 ```
 
-Open `http://localhost:5000` in your browser. The dashboard starts the background scheduler automatically.
+Open `http://localhost:5000` in your browser. The dashboard starts the background scheduler automatically. An in-app **Help** page at `http://localhost:5000/help` documents all features.
 
 To access from another device on the same network, use your computer's local IP:
 
