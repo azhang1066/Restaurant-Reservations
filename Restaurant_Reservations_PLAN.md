@@ -83,7 +83,7 @@ Key architectural decisions:
 - "Check Now" button — triggers immediate check from UI; shows "Checking…"; prevents overlapping runs with `_check_running` flag
 - Scheduler status pill — shows time since last check and minutes until next; updates every 30 s
 - Activity log auto-pruned to 500 entries
-- Availability count badge on watchlist cards 🔲
+- Availability count badge on watchlist cards ✅
 
 ### Stage 8 — Multi-Party-Size Support ✅
 - `party_sizes TEXT` column (JSON array, e.g. `"[4, 2]"`); backward compat via `_row_to_restaurant` fallback
@@ -108,6 +108,14 @@ Key architectural decisions:
 ## Completed This Session
 
 **Session date:** 2026-05-10
+
+### Availability count badge (Stage 7)
+
+- `last_slot_count INTEGER` column added to `restaurants` table (migration #8; also in fresh-DB `CREATE TABLE`)
+- `set_last_slot_count(restaurant_id, count)` added to `db.py`
+- `app/notifier.py` — `all_available: set` accumulates unique `(date, time)` tuples across all party-size × day combinations; `db.set_last_slot_count()` called at the end of each `check_restaurant()` run
+- `static/app.js` — badge rendered in the card header next to the platform badge: green "N slots" when `last_slot_count > 0`, gray "None available" when `0`, no badge before first check (`null`)
+- `static/style.css` — `.avail-badge`, `.avail-badge-some`, `.avail-badge-none` classes added
 
 ### One-tap Resy booking (Stage 9)
 
@@ -236,13 +244,10 @@ Run a full cycle with a real Resy restaurant that has open slots and verify:
 - Auto-book fires correctly with `AUTO_BOOK=true` and the cooldown is respected
 - Failed booking falls through to normal push notification
 
-### Priority 2 — Availability count badge (Stage 7)
-Add a small badge to each watchlist card showing the number of available slots found in the last check. Requires storing the latest slot count per restaurant (e.g. a `last_slot_count` column or in-memory dict) and surfacing it via the `/api/restaurants` response.
-
-### Priority 3 — Help page update
+### Priority 2 — Help page update
 Update `templates/help.html` to document the new Bookings panel, the "Book via Resy" button, and the Auto-Book toggle (including the credit card requirement and cooldown behaviour).
 
-### Priority 4 — Unit tests
+### Priority 3 — Unit tests
 Add tests for:
 - `resy_api.py` booking methods (mock HTTP responses for `/3/details`, `/3/book`, `/3/reservation`)
 - `deep_links.py` URL construction and fallback logic

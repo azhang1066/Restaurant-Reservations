@@ -180,12 +180,19 @@ function renderRestaurantCard(restaurant) {
   card.className = "restaurant-card";
   card.dataset.id = restaurant.id;
 
+  const slotCount = restaurant.last_slot_count;
+  const availBadge = slotCount == null ? "" :
+    slotCount > 0
+      ? `<span class="avail-badge avail-badge-some">${slotCount} slot${slotCount === 1 ? "" : "s"}</span>`
+      : `<span class="avail-badge avail-badge-none">None available</span>`;
+
   const header = document.createElement("div");
   header.className = "card-header";
   header.innerHTML = `
     <div>
       <strong>${restaurant.name}</strong>
       <span class="platform-badge">${restaurant.source.toUpperCase()}</span>
+      ${availBadge}
     </div>
     <div class="edit-actions">
       <button class="button toggle-switch toggle-btn" aria-pressed="${restaurant.enabled}" aria-label="Toggle monitoring for ${restaurant.name}"><span class="toggle-track"><span class="toggle-thumb"></span><span class="toggle-label-text">${restaurant.enabled ? "On" : "Off"}</span></span></button>

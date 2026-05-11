@@ -27,6 +27,7 @@ Automated Python application to monitor Resy and OpenTable for restaurant availa
 - Background monitoring on configurable intervals (default 20 min)
 - **Check Now** button for an immediate on-demand check
 - Scheduler status pill — shows time since last check and minutes until the next
+- **Availability badge** on each watchlist card — shows a live count of unique slots found in the last check cycle (green = available, gray = none found)
 
 **Advanced Filtering**
 - Priority-ordered party sizes — check for a table of 4 first, fall back to 2 if unavailable; no duplicate notifications for the same slot

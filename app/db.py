@@ -27,6 +27,7 @@ _MIGRATIONS: List[str] = [
     "ALTER TABLE activity_log ADD COLUMN url TEXT",              # 5
     "CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, restaurant_id INTEGER NOT NULL, venue_id TEXT NOT NULL, date TEXT NOT NULL, time TEXT NOT NULL, party_size INTEGER NOT NULL, resy_token TEXT, status TEXT NOT NULL DEFAULT 'confirmed', booked_at TEXT NOT NULL)",  # 6
     "ALTER TABLE activity_log ADD COLUMN booking_params TEXT",   # 7
+    "ALTER TABLE restaurants ADD COLUMN last_slot_count INTEGER", # 8
 ]
 
 
@@ -68,6 +69,7 @@ def init_db() -> sqlite3.Connection:
                 time_latest TEXT,
                 time_ranges TEXT,
                 enabled INTEGER NOT NULL DEFAULT 1,
+                last_slot_count INTEGER,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -163,6 +165,7 @@ def _row_to_restaurant(row: sqlite3.Row) -> Dict[str, Any]:
         "days": _deserialize_list(row["days"]),
         "time_ranges": _deserialize_list(row["time_ranges"]) if row["time_ranges"] else {},
         "enabled": bool(row["enabled"]),
+        "last_slot_count": row["last_slot_count"],
     }
 
 
@@ -255,6 +258,15 @@ def delete_restaurant(restaurant_id: int) -> bool:
     with conn:
         cursor = conn.execute("DELETE FROM restaurants WHERE id = ?", (restaurant_id,))
     return cursor.rowcount > 0
+
+
+def set_last_slot_count(restaurant_id: int, count: int) -> None:
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            "UPDATE restaurants SET last_slot_count = ? WHERE id = ?",
+            (count, restaurant_id),
+        )
 
 
 def add_activity_log(

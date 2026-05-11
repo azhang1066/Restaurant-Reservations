@@ -62,6 +62,8 @@ def check_restaurant(restaurant: dict) -> None:
     # Tracks (date, time) combos already notified this run so a lower-priority
     # party size doesn't duplicate a notification for the same slot.
     notified_this_run: set = set()
+    # All unique (date, time) combos with available slots across all sizes/days.
+    all_available: set = set()
 
     for party_size in party_sizes:
         for day in days:
@@ -88,6 +90,7 @@ def check_restaurant(restaurant: dict) -> None:
                 slots = filter_slots_by_time(slots, time_range)
 
             current_times = {slot.time for slot in slots}
+            all_available.update((date, t) for t in current_times)
             db.remove_stale_notified_slots(venue_id, date, party_size, current_times)
 
             if not slots:
@@ -238,6 +241,9 @@ def check_restaurant(restaurant: dict) -> None:
                         f"❌ Notification failed · email — {restaurant['name']} ({len(actually_notified)} slot(s))",
                         "error",
                     )
+
+    if restaurant.get("id"):
+        db.set_last_slot_count(restaurant["id"], len(all_available))
 
 
 def run_check() -> None:

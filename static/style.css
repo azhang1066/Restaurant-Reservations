@@ -133,6 +133,26 @@ body {
   color: #a7f3d0;
 }
 
+.avail-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.avail-badge-some {
+  background: rgba(34, 197, 94, 0.16);
+  color: #a7f3d0;
+}
+
+.avail-badge-none {
+  background: rgba(148, 163, 184, 0.12);
+  color: #64748b;
+}
+
 .card-body,
 .restaurant-form,
 .settings-form {
