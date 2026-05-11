@@ -112,11 +112,26 @@ Key architectural decisions:
 - **`app/availability.py`** — `send_email_notification(restaurant, slots, smtp_settings)` reads SMTP config from settings dict first, env fallback
 - `user_id=1` hardcoded throughout; column exists for multi-user wiring later
 
+### Stage 11 — Multi-User Support ✅
+- **`app/db.py`** — `users` table (`id, email, password_hash, created_at`); `user_id INTEGER NOT NULL DEFAULT 1` added to `restaurants`, `activity_log`, `bookings`; `notified_slots` recreated with `user_id` in composite PK; Resy credentials (`resy_api_key`, `resy_auth_token`, `auto_book`, `resy_payment_method_id`, `check_interval_minutes`) moved from `.env` into `user_settings` as new columns; migrations 10–22 handle all schema changes idempotently; `get_user_by_id()`, `get_user_by_email()`, `create_user()`, `get_active_user_ids()` added; all CRUD functions (`get_restaurants`, `get_restaurant`, `add_restaurant`, `update_restaurant`, `delete_restaurant`, `get_recent_logs`, `add_activity_log`, `get_bookings`, `add_booking`, `cancel_booking`, `has_notified_slot`, `add_notified_slot`, `remove_stale_notified_slots`) accept `user_id`; `seed_user_settings_from_env()` seeds new user's settings from `.env` on first registration so existing credentials carry over
+- **`app/auth.py`** — new file; Flask-Login `LoginManager` + `User(UserMixin)` class; `auth_bp` Blueprint with `/login`, `/register`, `/logout` routes; `werkzeug.security` for password hashing; first registered user gets env-seeded settings + auto-generated ntfy topic
+- **`app/app.py`** — `login_manager.init_app(app)` + `auth_bp` registered; `SECRET_KEY` from env (falls back to `os.urandom`); all routes decorated with `@login_required`; `_uid()` helper returns `current_user.id`; all DB calls pass `_uid()`; Resy credentials read from `user_settings` instead of `.env`; `_ENV_ONLY_KEYS` / `_save_env` removed; `user_email` passed to `index.html` template
+- **`app/notifier.py`** — `run_check()` calls `db.get_active_user_ids()` then iterates per user: loads each user's settings + restaurants, runs `check_restaurant(restaurant, user_settings)`; `check_restaurant()` accepts `user_settings` dict instead of reading global env; `create_resy_client()` called with per-user `RESY_API_KEY`/`RESY_AUTH_TOKEN`; `AUTO_BOOK` and `RESY_PAYMENT_METHOD_ID` come from `user_settings`; `_auto_book_cooldowns` keyed by `(user_id, venue_id)` tuple; all `db.*` calls pass `user_id`
+- **`app/availability.py`** — `check_resy_availability()` accepts optional `api_key`/`auth_token` and forwards them to `create_resy_client()`
+- **`templates/login.html`**, **`templates/register.html`** — new auth pages matching dark theme; login/register forms with error display
+- **`templates/index.html`** — user email pill + Sign Out link added to header
+- **`static/app.js`** — `apiFetch()` redirects to `/login` on 401 response
+- **`static/style.css`** — `.user-pill` style for header email display
+- **`requirements.txt`** — added `Flask-Login>=0.6.3`
+- Fresh installs: first user to register gets `id=1`; existing data (all `user_id=1`) naturally belongs to that first user; `.env` credentials auto-seed into their `user_settings` on registration
+
 ---
 
 ## Completed This Session
 
 **Session date:** 2026-05-10
+
+### Stage 11 — Multi-user support (see stage entry above for full detail)
 
 ### Stage 10 — Notification settings to DB (see stage entry above for full detail)
 
@@ -239,21 +254,19 @@ Key decisions:
 
 ## Next Actions
 
-### Priority 1 — Multi-user wiring
-Wire `user_id` from Flask session/auth context into `get_user_settings()` / `save_user_settings()` once auth is added (currently hardcoded to 1).
-
-### Priority 2 — End-to-end live test of booking flow
+### Priority 1 — End-to-end live test of booking flow
 Run a full cycle with a real Resy restaurant that has open slots and verify:
 - `GET /3/details` returns a valid `config_id` and `payment_method_id`
 - `POST /3/book` completes and returns a `resy_token`
 - Booking appears in the Bookings panel with status `confirmed`
 - Cancel button calls `DELETE /3/reservation` and updates status to `cancelled`
-- Auto-book fires correctly with `AUTO_BOOK=true` and the cooldown is respected
+- Auto-book fires correctly with `AUTO_BOOK` enabled in user settings and the cooldown is respected
 - Failed booking falls through to normal push notification
 
-### Priority 3 — Unit tests
+### Priority 2 — Unit tests
 Add tests for:
 - `resy_api.py` booking methods (mock HTTP responses for `/3/details`, `/3/book`, `/3/reservation`)
 - `deep_links.py` URL construction and fallback logic
 - `notifiers/` send payloads
 - `db.get_user_settings()` / `db.save_user_settings()` round-trip
+- Auth flow: register, login, per-user data isolation

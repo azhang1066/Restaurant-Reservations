@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 last_check_time: datetime | None = None
 _check_lock = threading.Lock()
 
-_auto_book_cooldowns: dict[str, float] = {}
+# Cooldowns keyed by (user_id, venue_id) to isolate per-user auto-book rate limiting.
+_auto_book_cooldowns: dict[tuple, float] = {}
 _COOLDOWN_SECONDS = 60
 
 
@@ -42,28 +43,26 @@ def is_check_running() -> bool:
     return _check_lock.locked()
 
 
-def check_restaurant(restaurant: dict) -> None:
+def check_restaurant(restaurant: dict, user_settings: dict) -> None:
     source = restaurant.get("source", "resy").lower()
     party_sizes = restaurant.get("party_sizes") or [2]
     days = restaurant.get("days") or []
     time_ranges = restaurant.get("time_ranges") or {}
+    user_id = restaurant.get("user_id", 1)
 
     venue_id = restaurant.get("opentable_rid") if source == "opentable" else restaurant.get("resy_venue_id")
     if not venue_id:
         msg = f"Missing venue ID for {restaurant.get('name', 'Unknown')}"
         logger.warning(msg)
-        db.add_activity_log(msg, "warning")
+        db.add_activity_log(msg, "warning", user_id=user_id)
         return
 
-    user_settings = db.get_user_settings()
     push_enabled = user_settings.get("NOTIFY_VIA_PUSH", "true").lower() == "true"
     email_enabled = user_settings.get("NOTIFY_VIA_EMAIL", "true").lower() == "true"
+    auto_book = user_settings.get("AUTO_BOOK", "false").lower() == "true"
     notifier = get_notifier(user_settings)
 
-    # Tracks (date, time) combos already notified this run so a lower-priority
-    # party size doesn't duplicate a notification for the same slot.
     notified_this_run: set = set()
-    # All unique (date, time) combos with available slots across all sizes/days.
     all_available: set = set()
 
     for party_size in party_sizes:
@@ -80,31 +79,37 @@ def check_restaurant(restaurant: dict) -> None:
             db.add_activity_log(
                 f"Checking {restaurant['name']} ({source}) for {day} ({date}) size={party_size}",
                 "debug",
+                user_id=user_id,
             )
 
             if source == "opentable":
                 slots = check_opentable_availability(venue_id, party_size, date)
             else:
-                slots = check_resy_availability(venue_id, party_size, date)
+                slots = check_resy_availability(
+                    venue_id, party_size, date,
+                    api_key=user_settings.get("RESY_API_KEY"),
+                    auth_token=user_settings.get("RESY_AUTH_TOKEN"),
+                )
 
             if time_range:
                 slots = filter_slots_by_time(slots, time_range)
 
             current_times = {slot.time for slot in slots}
             all_available.update((date, t) for t in current_times)
-            db.remove_stale_notified_slots(venue_id, date, party_size, current_times)
+            db.remove_stale_notified_slots(user_id, venue_id, date, party_size, current_times)
 
             if not slots:
                 db.add_activity_log(
                     f"🔍 Check complete · nothing found — {restaurant['name']} {day} (size={party_size})",
                     "debug",
+                    user_id=user_id,
                 )
                 continue
 
             new_slots = []
             skipped_slots = []
             for slot in slots:
-                if db.has_notified_slot(venue_id, date, slot.time, party_size):
+                if db.has_notified_slot(user_id, venue_id, date, slot.time, party_size):
                     skipped_slots.append(slot)
                 else:
                     new_slots.append(slot)
@@ -113,9 +118,8 @@ def check_restaurant(restaurant: dict) -> None:
                 db.add_activity_log(
                     f"🔁 Slot found · skipped (already notified) — {restaurant['name']} {day}: {len(skipped_slots)} slot(s)",
                     "debug",
+                    user_id=user_id,
                 )
-
-            auto_book = os.getenv("AUTO_BOOK", "false").lower() == "true"
 
             actually_notified = []
             for slot in new_slots:
@@ -123,11 +127,12 @@ def check_restaurant(restaurant: dict) -> None:
                     db.add_activity_log(
                         f"🔁 Slot found · skipped (larger party already notified) — {restaurant['name']} {day} {slot.time}",
                         "debug",
+                        user_id=user_id,
                     )
                     continue
 
                 notified_this_run.add((date, slot.time))
-                db.add_notified_slot(venue_id, date, slot.time, party_size)
+                db.add_notified_slot(user_id, venue_id, date, slot.time, party_size)
 
                 slot_dict = {"date": date, "time": slot.time, "party_size": party_size}
                 urls = build_booking_url(source, restaurant, slot_dict)
@@ -146,25 +151,30 @@ def check_restaurant(restaurant: dict) -> None:
 
                 auto_booked = False
                 if auto_book and source == "resy":
+                    cooldown_key = (user_id, venue_id)
                     now_ts = time.time()
-                    last_attempt = _auto_book_cooldowns.get(venue_id, 0)
+                    last_attempt = _auto_book_cooldowns.get(cooldown_key, 0)
                     if now_ts - last_attempt < _COOLDOWN_SECONDS:
                         db.add_activity_log(
                             f"⏱ Auto-book skipped (cooldown) — {restaurant['name']} {date} {slot.time}",
                             "debug",
+                            user_id=user_id,
                         )
                     else:
-                        _auto_book_cooldowns[venue_id] = now_ts
+                        _auto_book_cooldowns[cooldown_key] = now_ts
                         db.add_activity_log(
                             f"🤖 Auto-book attempt — {restaurant['name']}: {date} {slot.time}, Table for {party_size}",
                             "info",
+                            user_id=user_id,
                         )
                         try:
-                            client = create_resy_client()
-                            details = client.get_booking_details(venue_id, date, slot.time, party_size)
-                            confirmation = client.book_reservation(
-                                details["config_id"], details["payment_method_id"]
+                            client = create_resy_client(
+                                api_key=user_settings.get("RESY_API_KEY"),
+                                auth_token=user_settings.get("RESY_AUTH_TOKEN"),
                             )
+                            details = client.get_booking_details(venue_id, date, slot.time, party_size)
+                            payment_method_id = user_settings.get("RESY_PAYMENT_METHOD_ID") or details["payment_method_id"]
+                            confirmation = client.book_reservation(details["config_id"], payment_method_id)
                             resy_token = confirmation["resy_token"]
                             db.add_booking({
                                 "restaurant_id": restaurant.get("id"),
@@ -174,10 +184,10 @@ def check_restaurant(restaurant: dict) -> None:
                                 "party_size": party_size,
                                 "resy_token": resy_token,
                                 "status": "confirmed",
-                            })
+                            }, user_id)
                             auto_booked = True
                             booked_msg = f"✅ Booked! {restaurant['name']}: {date} {slot.time}, Table for {party_size} — Confirmation: {resy_token}"
-                            db.add_activity_log(booked_msg, "info", highlight=True)
+                            db.add_activity_log(booked_msg, "info", highlight=True, user_id=user_id)
                             notifier.send(
                                 restaurant["name"],
                                 {**slot_dict, "auto_booked": True, "resy_token": resy_token},
@@ -185,23 +195,23 @@ def check_restaurant(restaurant: dict) -> None:
                             )
                         except ResySlotUnavailableError as e:
                             db.add_activity_log(
-                                f"⚠️ Auto-book failed (slot gone) — {restaurant['name']}: {e}", "warning"
+                                f"⚠️ Auto-book failed (slot gone) — {restaurant['name']}: {e}", "warning", user_id=user_id
                             )
                         except ResyPaymentError as e:
                             db.add_activity_log(
-                                f"⚠️ Auto-book failed (payment) — {restaurant['name']}: {e}", "warning"
+                                f"⚠️ Auto-book failed (payment) — {restaurant['name']}: {e}", "warning", user_id=user_id
                             )
                         except ResyAuthError as e:
                             db.add_activity_log(
-                                f"⚠️ Auto-book failed (auth) — {restaurant['name']}: {e}", "warning"
+                                f"⚠️ Auto-book failed (auth) — {restaurant['name']}: {e}", "warning", user_id=user_id
                             )
                         except ResyTimeoutError as e:
                             db.add_activity_log(
-                                f"⚠️ Auto-book failed (timeout) — {restaurant['name']}: {e}", "warning"
+                                f"⚠️ Auto-book failed (timeout) — {restaurant['name']}: {e}", "warning", user_id=user_id
                             )
                         except ResyBookingError as e:
                             db.add_activity_log(
-                                f"⚠️ Auto-book failed — {restaurant['name']}: {e}", "warning"
+                                f"⚠️ Auto-book failed — {restaurant['name']}: {e}", "warning", user_id=user_id
                             )
 
                 if auto_booked:
@@ -217,6 +227,7 @@ def check_restaurant(restaurant: dict) -> None:
                         highlight=True,
                         url=booking_url,
                         booking_params=booking_params,
+                        user_id=user_id,
                     )
                 elif push_enabled:
                     db.add_activity_log(
@@ -224,6 +235,7 @@ def check_restaurant(restaurant: dict) -> None:
                         "error",
                         url=booking_url,
                         booking_params=booking_params,
+                        user_id=user_id,
                     )
                 else:
                     db.add_activity_log(
@@ -232,6 +244,7 @@ def check_restaurant(restaurant: dict) -> None:
                         highlight=True,
                         url=booking_url,
                         booking_params=booking_params,
+                        user_id=user_id,
                     )
                 actually_notified.append(slot)
 
@@ -241,6 +254,7 @@ def check_restaurant(restaurant: dict) -> None:
                     db.add_activity_log(
                         f"❌ Notification failed · email — {restaurant['name']} ({len(actually_notified)} slot(s))",
                         "error",
+                        user_id=user_id,
                     )
 
     if restaurant.get("id"):
@@ -254,26 +268,33 @@ def run_check() -> None:
         return
     try:
         logger.info("Starting availability check")
-        db.add_activity_log("Starting availability check", "info")
 
-        restaurants = db.get_restaurants()
+        active_user_ids = db.get_active_user_ids()
 
-        if not restaurants:
-            msg = "No restaurants configured yet. Add a restaurant in the dashboard."
-            logger.info(msg)
-            db.add_activity_log(msg, "info")
+        if not active_user_ids:
+            logger.info("No restaurants configured yet.")
+            last_check_time = datetime.now(timezone.utc)
+            return
 
-        for restaurant in restaurants:
-            if not restaurant.get("enabled", True):
-                continue
-            try:
-                check_restaurant(restaurant)
-            except Exception as e:
-                logger.error(f"Error checking {restaurant['name']}: {e}")
-                db.add_activity_log(f"Error checking {restaurant['name']}: {e}", "error")
+        for user_id in active_user_ids:
+            user_settings = db.get_user_settings(user_id)
+            restaurants = db.get_restaurants(user_id)
+            db.add_activity_log("Starting availability check", "info", user_id=user_id)
+
+            for restaurant in restaurants:
+                if not restaurant.get("enabled", True):
+                    continue
+                try:
+                    check_restaurant(restaurant, user_settings)
+                except Exception as e:
+                    logger.error(f"Error checking {restaurant['name']} (user {user_id}): {e}")
+                    db.add_activity_log(
+                        f"Error checking {restaurant['name']}: {e}", "error", user_id=user_id
+                    )
+
+            db.add_activity_log("Availability check complete", "info", user_id=user_id)
 
         logger.info("Availability check complete")
-        db.add_activity_log("Availability check complete", "info")
         last_check_time = datetime.now(timezone.utc)
     finally:
         _check_lock.release()
@@ -291,7 +312,6 @@ def start_scheduler() -> None:
             time.sleep(1)
     except Exception as e:
         logger.error(f"Scheduler error: {e}")
-        db.add_activity_log(f"Scheduler error: {e}", "error")
 
 
 def start_background_scheduler() -> threading.Thread:

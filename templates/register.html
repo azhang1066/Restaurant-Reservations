@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Account — Restaurant Notifier</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .auth-shell {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .auth-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 400px;
+    }
+    .auth-card h1 {
+      margin: 0 0 6px;
+      font-size: 1.5rem;
+    }
+    .auth-card p.subtitle {
+      margin: 0 0 28px;
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
+    .auth-card .form-group { margin-bottom: 18px; }
+    .auth-card label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.875rem;
+      color: #d1d5db;
+    }
+    .auth-card input[type="email"],
+    .auth-card input[type="password"] {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.06);
+      color: #e5e7eb;
+      font-size: 1rem;
+    }
+    .auth-card input:focus {
+      outline: none;
+      border-color: #6366f1;
+    }
+    .auth-card .btn-submit {
+      width: 100%;
+      margin-top: 8px;
+    }
+    .auth-footer {
+      margin-top: 20px;
+      text-align: center;
+      color: #9ca3af;
+      font-size: 0.875rem;
+    }
+    .auth-footer a { color: #818cf8; text-decoration: none; }
+    .auth-footer a:hover { text-decoration: underline; }
+    .auth-error {
+      background: rgba(239,68,68,0.15);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 20px;
+      color: #fca5a5;
+      font-size: 0.9rem;
+    }
+    .hint { color: #6b7280; font-size: 0.8rem; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="auth-shell">
+    <div class="auth-card">
+      <h1>Restaurant Notifier</h1>
+      <p class="subtitle">Create your account</p>
+
+      {% if error %}
+      <div class="auth-error">{{ error }}</div>
+      {% endif %}
+
+      <form method="POST">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required autofocus />
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="new-password" required />
+          <p class="hint">At least 8 characters</p>
+        </div>
+        <div class="form-group">
+          <label for="confirm">Confirm Password</label>
+          <input id="confirm" name="confirm" type="password" autocomplete="new-password" required />
+        </div>
+        <button type="submit" class="button button-primary btn-submit">Create Account</button>
+      </form>
+
+      <div class="auth-footer">
+        Already have an account? <a href="/login">Sign in</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

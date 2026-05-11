@@ -1,17 +1,14 @@
-import json
 import os
-import random
-import string
-import tempfile
 import threading
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask_login import current_user, login_required
 
 from . import db
 from . import notifier as _notifier
+from .auth import User, auth_bp, login_manager
 from .notifier import start_background_scheduler
 from deep_links import build_booking_url
 from lookup_venue import parse_opentable_url, parse_resy_url
@@ -27,14 +24,18 @@ from resy_api import (
 
 load_dotenv()
 
+from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
-ENV_PATH = BASE_DIR / ".env"
 
 app = Flask(
     __name__,
     template_folder=str(BASE_DIR / "templates"),
     static_folder=str(BASE_DIR / "static"),
 )
+app.secret_key = os.getenv("SECRET_KEY") or os.urandom(24)
+
+login_manager.init_app(app)
+app.register_blueprint(auth_bp)
 
 scheduler_thread = start_background_scheduler()
 
@@ -47,51 +48,34 @@ def _validate_party_sizes(sizes) -> bool:
     )
 
 
-def _load_env() -> dict:
-    env_values = {}
-    if ENV_PATH.exists():
-        with open(ENV_PATH, "r", encoding="utf-8") as env_file:
-            for line in env_file:
-                stripped = line.strip()
-                if not stripped or stripped.startswith("#"):
-                    continue
-                if "=" not in stripped:
-                    continue
-                key, value = stripped.split("=", 1)
-                env_values[key.strip()] = value.strip()
-    return env_values
-
-
-def _save_env(settings: dict) -> None:
-    current = _load_env()
-    current.update(settings)
-    fd, tmp = tempfile.mkstemp(dir=ENV_PATH.parent, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
-            for key, value in current.items():
-                tmp_file.write(f"{key}={value}\n")
-        Path(tmp).replace(ENV_PATH)
-    except Exception:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+def _uid() -> int:
+    return current_user.id
 
 
 @app.route("/")
+@login_required
 def index():
-    return render_template("index.html")
+    return render_template("index.html", user_email=current_user.email)
 
 
 @app.route("/help")
+@login_required
 def help_page():
     return render_template("help.html")
 
 
+# ---------------------------------------------------------------------------
+# Restaurants
+# ---------------------------------------------------------------------------
+
 @app.route("/api/restaurants", methods=["GET"])
+@login_required
 def list_restaurants():
-    return jsonify(db.get_restaurants())
+    return jsonify(db.get_restaurants(_uid()))
 
 
 @app.route("/api/restaurants", methods=["POST"])
+@login_required
 def create_restaurant():
     payload = request.get_json(force=True)
     required = ["name", "source", "party_sizes", "days"]
@@ -115,14 +99,15 @@ def create_restaurant():
         "enabled": payload.get("enabled", True),
     }
 
-    restaurant_id = db.add_restaurant(restaurant)
+    restaurant_id = db.add_restaurant(restaurant, _uid())
     return jsonify({"id": restaurant_id}), 201
 
 
 @app.route("/api/restaurants/<int:restaurant_id>", methods=["PUT"])
+@login_required
 def update_restaurant(restaurant_id: int):
     payload = request.get_json(force=True)
-    restaurant = db.get_restaurant(restaurant_id)
+    restaurant = db.get_restaurant(restaurant_id, _uid())
     if not restaurant:
         return jsonify({"error": "Restaurant not found."}), 404
 
@@ -141,31 +126,34 @@ def update_restaurant(restaurant_id: int):
             "enabled": payload.get("enabled", restaurant.get("enabled", True)),
         }
     )
-    db.update_restaurant(restaurant_id, restaurant)
+    db.update_restaurant(restaurant_id, restaurant, _uid())
     return jsonify({"success": True})
 
 
 @app.route("/api/restaurants/<int:restaurant_id>", methods=["DELETE"])
+@login_required
 def delete_restaurant(restaurant_id: int):
-    removed = db.delete_restaurant(restaurant_id)
+    removed = db.delete_restaurant(restaurant_id, _uid())
     if not removed:
         return jsonify({"error": "Restaurant not found."}), 404
     return jsonify({"success": True})
 
 
 @app.route("/api/restaurants/<int:restaurant_id>/toggle", methods=["POST"])
+@login_required
 def toggle_restaurant(restaurant_id: int):
     payload = request.get_json(force=True)
     enabled = bool(payload.get("enabled", True))
-    restaurant = db.get_restaurant(restaurant_id)
+    restaurant = db.get_restaurant(restaurant_id, _uid())
     if not restaurant:
         return jsonify({"error": "Restaurant not found."}), 404
     restaurant["enabled"] = enabled
-    db.update_restaurant(restaurant_id, restaurant)
+    db.update_restaurant(restaurant_id, restaurant, _uid())
     return jsonify({"success": True, "enabled": enabled})
 
 
 @app.route("/api/resolve-url", methods=["POST"])
+@login_required
 def resolve_url():
     payload = request.get_json(force=True)
     url = payload.get("url", "").strip()
@@ -175,10 +163,13 @@ def resolve_url():
     result = parse_resy_url(url)
     if result:
         venue_id, venue_name, slug, city = result
-        # If the URL didn't contain a numeric venue ID (new format), try to
-        # look it up via the Resy API so monitoring can be set up immediately.
         if not venue_id and slug and city:
-            venue_id = create_resy_client().get_venue_id_from_slug(slug, city) or ""
+            user_settings = db.get_user_settings(_uid())
+            client = create_resy_client(
+                api_key=user_settings.get("RESY_API_KEY"),
+                auth_token=user_settings.get("RESY_AUTH_TOKEN"),
+            )
+            venue_id = client.get_venue_id_from_slug(slug, city) or ""
         return jsonify(
             {
                 "source": "resy",
@@ -204,51 +195,50 @@ def resolve_url():
     return jsonify({"error": "Could not resolve URL. Please provide a Resy or OpenTable URL."}), 400
 
 
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+
 @app.route("/api/logs", methods=["GET"])
+@login_required
 def list_logs():
-    return jsonify(db.get_recent_logs())
+    return jsonify(db.get_recent_logs(_uid()))
 
 
-# Keys that must stay in .env (Resy credentials, booking flags, scheduler config).
-# Everything else is a notification setting and lives in user_settings in the DB.
-_ENV_ONLY_KEYS = {"RESY_API_KEY", "RESY_AUTH_TOKEN", "AUTO_BOOK", "RESY_PAYMENT_METHOD_ID", "CHECK_INTERVAL_MINUTES"}
-
+# ---------------------------------------------------------------------------
+# Settings  (all per-user, stored in user_settings)
+# ---------------------------------------------------------------------------
 
 @app.route("/api/settings", methods=["GET"])
+@login_required
 def get_settings():
-    user_settings = db.get_user_settings()
+    import random, string
+    user_settings = db.get_user_settings(_uid())
 
-    # Auto-generate a random ntfy topic on first load so the user has one ready
     if not user_settings.get("NTFY_TOPIC"):
         suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
         user_settings["NTFY_TOPIC"] = f"resy-notifier-{suffix}"
-        db.save_user_settings({"NTFY_TOPIC": user_settings["NTFY_TOPIC"]})
+        db.save_user_settings({"NTFY_TOPIC": user_settings["NTFY_TOPIC"]}, _uid())
 
-    env = _load_env()
-    return jsonify({
-        **user_settings,
-        "RESY_API_KEY": env.get("RESY_API_KEY", ""),
-        "RESY_AUTH_TOKEN": env.get("RESY_AUTH_TOKEN", ""),
-        "AUTO_BOOK": env.get("AUTO_BOOK", ""),
-        "RESY_PAYMENT_METHOD_ID": env.get("RESY_PAYMENT_METHOD_ID", ""),
-    })
+    return jsonify(user_settings)
 
 
 @app.route("/api/settings", methods=["POST"])
+@login_required
 def save_settings():
     payload = request.get_json(force=True)
-    env_settings = {k: v for k, v in payload.items() if k in _ENV_ONLY_KEYS}
-    db_settings = {k: v for k, v in payload.items() if k not in _ENV_ONLY_KEYS}
-    if env_settings:
-        _save_env(env_settings)
-    if db_settings:
-        db.save_user_settings(db_settings)
+    db.save_user_settings(payload, _uid())
     return jsonify({"success": True})
 
 
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+
 @app.route("/api/test-notification", methods=["POST"])
+@login_required
 def test_notification():
-    user_settings = db.get_user_settings()
+    user_settings = db.get_user_settings(_uid())
     notifier = get_notifier(user_settings)
     provider = user_settings.get("NOTIFY_PROVIDER") or "ntfy"
     test_slot = {
@@ -256,19 +246,23 @@ def test_notification():
         "time": "19:30",
         "party_size": 2,
     }
-    # Use a known-good Resy homepage as the test click target
     test_urls = {"web_url": "https://resy.com", "app_url": "https://resy.com", "fallback_url": "https://resy.com"}
     success = notifier.send("Test Restaurant", test_slot, test_urls)
     if success:
-        db.add_activity_log(f"Test notification sent via {provider}", "info")
+        db.add_activity_log(f"Test notification sent via {provider}", "info", user_id=_uid())
         return jsonify({"success": True, "message": f"Test notification sent via {provider}!"})
-    db.add_activity_log(f"Test notification failed via {provider}", "error")
+    db.add_activity_log(f"Test notification failed via {provider}", "error", user_id=_uid())
     return jsonify({"success": False, "message": f"Failed — check {provider.upper()} config."}), 400
 
 
+# ---------------------------------------------------------------------------
+# Deep links
+# ---------------------------------------------------------------------------
+
 @app.route("/api/restaurants/<int:restaurant_id>/deep-link", methods=["GET"])
+@login_required
 def restaurant_deep_link(restaurant_id: int):
-    restaurant = db.get_restaurant(restaurant_id)
+    restaurant = db.get_restaurant(restaurant_id, _uid())
     if not restaurant:
         return jsonify({"error": "Restaurant not found."}), 404
 
@@ -284,9 +278,14 @@ def restaurant_deep_link(restaurant_id: int):
     return jsonify(urls)
 
 
+# ---------------------------------------------------------------------------
+# Booking
+# ---------------------------------------------------------------------------
+
 @app.route("/api/restaurants/<int:restaurant_id>/book", methods=["POST"])
+@login_required
 def book_restaurant(restaurant_id: int):
-    restaurant = db.get_restaurant(restaurant_id)
+    restaurant = db.get_restaurant(restaurant_id, _uid())
     if not restaurant:
         return jsonify({"success": False, "message": "Restaurant not found.", "data": {}}), 404
 
@@ -305,10 +304,15 @@ def book_restaurant(restaurant_id: int):
     if not all([date, time_str, party_size]):
         return jsonify({"success": False, "message": "date, time, and party_size are required.", "data": {}}), 400
 
-    client = create_resy_client()
+    user_settings = db.get_user_settings(_uid())
+    client = create_resy_client(
+        api_key=user_settings.get("RESY_API_KEY"),
+        auth_token=user_settings.get("RESY_AUTH_TOKEN"),
+    )
     try:
         details = client.get_booking_details(venue_id, date, time_str, int(party_size))
-        confirmation = client.book_reservation(details["config_id"], details["payment_method_id"])
+        payment_method_id = user_settings.get("RESY_PAYMENT_METHOD_ID") or details["payment_method_id"]
+        confirmation = client.book_reservation(details["config_id"], payment_method_id)
         resy_token = confirmation["resy_token"]
 
         booking_id = db.add_booking({
@@ -319,11 +323,12 @@ def book_restaurant(restaurant_id: int):
             "party_size": int(party_size),
             "resy_token": resy_token,
             "status": "confirmed",
-        })
+        }, _uid())
         db.add_activity_log(
             f"✅ Booked! {restaurant['name']}: {date} {time_str}, Table for {party_size} — Token: {resy_token}",
             "info",
             highlight=True,
+            user_id=_uid(),
         )
         return jsonify({
             "success": True,
@@ -339,8 +344,8 @@ def book_restaurant(restaurant_id: int):
         })
 
     except ResySlotUnavailableError as e:
-        db.add_booking({"restaurant_id": restaurant_id, "venue_id": venue_id, "date": date, "time": time_str, "party_size": int(party_size), "status": "failed"})
-        db.add_activity_log(f"❌ Booking failed — {restaurant['name']}: {e}", "error")
+        db.add_booking({"restaurant_id": restaurant_id, "venue_id": venue_id, "date": date, "time": time_str, "party_size": int(party_size), "status": "failed"}, _uid())
+        db.add_activity_log(f"❌ Booking failed — {restaurant['name']}: {e}", "error", user_id=_uid())
         return jsonify({"success": False, "message": str(e), "data": {}}), 409
     except ResyPaymentError as e:
         return jsonify({"success": False, "message": str(e), "data": {}}), 402
@@ -349,18 +354,20 @@ def book_restaurant(restaurant_id: int):
     except ResyTimeoutError as e:
         return jsonify({"success": False, "message": str(e), "data": {}}), 504
     except ResyBookingError as e:
-        db.add_activity_log(f"❌ Booking failed — {restaurant['name']}: {e}", "error")
+        db.add_activity_log(f"❌ Booking failed — {restaurant['name']}: {e}", "error", user_id=_uid())
         return jsonify({"success": False, "message": str(e), "data": {}}), 400
 
 
 @app.route("/api/bookings", methods=["GET"])
+@login_required
 def list_bookings():
-    return jsonify({"success": True, "data": db.get_bookings()})
+    return jsonify({"success": True, "data": db.get_bookings(_uid())})
 
 
 @app.route("/api/bookings/<int:booking_id>", methods=["DELETE"])
+@login_required
 def cancel_booking_endpoint(booking_id: int):
-    booking = db.cancel_booking(booking_id)
+    booking = db.cancel_booking(booking_id, _uid())
     if not booking:
         return jsonify({"success": False, "message": "Booking not found.", "data": {}}), 404
     if booking.get("status") == "cancelled":
@@ -368,21 +375,32 @@ def cancel_booking_endpoint(booking_id: int):
 
     resy_token = booking.get("resy_token")
     if resy_token:
+        user_settings = db.get_user_settings(_uid())
+        client = create_resy_client(
+            api_key=user_settings.get("RESY_API_KEY"),
+            auth_token=user_settings.get("RESY_AUTH_TOKEN"),
+        )
         try:
-            create_resy_client().cancel_reservation(resy_token)
+            client.cancel_reservation(resy_token)
         except ResyBookingError as e:
-            db.add_activity_log(f"⚠️ Resy cancel API failed for token {resy_token}: {e}", "warning")
+            db.add_activity_log(f"⚠️ Resy cancel API failed for token {resy_token}: {e}", "warning", user_id=_uid())
 
-    restaurant = db.get_restaurant(booking["restaurant_id"])
+    restaurant = db.get_restaurant(booking["restaurant_id"], _uid())
     name = restaurant["name"] if restaurant else "Unknown"
     db.add_activity_log(
         f"🚫 Booking cancelled — {name}: {booking['date']} {booking['time']}, Table for {booking['party_size']}",
         "info",
+        user_id=_uid(),
     )
     return jsonify({"success": True, "message": "Booking cancelled.", "data": {}})
 
 
+# ---------------------------------------------------------------------------
+# Scheduler controls
+# ---------------------------------------------------------------------------
+
 @app.route("/api/check-now", methods=["POST"])
+@login_required
 def check_now():
     if _notifier.is_check_running():
         return jsonify({"success": False, "message": "A check is already in progress."}), 409
@@ -392,15 +410,17 @@ def check_now():
 
 
 @app.route("/api/status", methods=["GET"])
+@login_required
 def get_status():
     last_check = _notifier.last_check_time
     next_check = None
     if last_check:
-        next_check = last_check + timedelta(minutes=int(os.getenv("CHECK_INTERVAL_MINUTES", 20)))
+        interval = int(os.getenv("CHECK_INTERVAL_MINUTES", 20))
+        next_check = last_check + timedelta(minutes=interval)
     return jsonify({
         "last_check": last_check.isoformat() if last_check else None,
         "next_check": next_check.isoformat() if next_check else None,
-        "restaurant_count": len(db.get_restaurants()),
+        "restaurant_count": len(db.get_restaurants(_uid())),
     })
 
 

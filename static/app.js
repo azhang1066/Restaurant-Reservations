@@ -172,6 +172,10 @@ async function apiFetch(url, options = {}) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
+  if (response.status === 401) {
+    window.location.href = "/login";
+    return {};
+  }
   return response.json();
 }
 

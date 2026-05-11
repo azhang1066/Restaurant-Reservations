@@ -48,8 +48,11 @@ def filter_slots_by_time(slots: list[TimeSlot], time_range: Optional[tuple]) -> 
     return filtered
 
 
-def check_resy_availability(venue_id: str, party_size: int, date: str) -> list[TimeSlot]:
-    return create_resy_client().get_availability(venue_id, party_size, date)
+def check_resy_availability(
+    venue_id: str, party_size: int, date: str,
+    api_key: str = None, auth_token: str = None,
+) -> list[TimeSlot]:
+    return create_resy_client(api_key=api_key, auth_token=auth_token).get_availability(venue_id, party_size, date)
 
 
 def check_opentable_availability(rid: str, party_size: int, date: str) -> list[TimeSlot]:
