@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -28,7 +29,27 @@ _MIGRATIONS: List[str] = [
     "CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, restaurant_id INTEGER NOT NULL, venue_id TEXT NOT NULL, date TEXT NOT NULL, time TEXT NOT NULL, party_size INTEGER NOT NULL, resy_token TEXT, status TEXT NOT NULL DEFAULT 'confirmed', booked_at TEXT NOT NULL)",  # 6
     "ALTER TABLE activity_log ADD COLUMN booking_params TEXT",   # 7
     "ALTER TABLE restaurants ADD COLUMN last_slot_count INTEGER", # 8
+    "CREATE TABLE IF NOT EXISTS user_settings (user_id INTEGER PRIMARY KEY, notify_provider TEXT, ntfy_topic TEXT, pushover_user_key TEXT, pushover_app_token TEXT, pushover_token TEXT, pushover_user TEXT, smtp_host TEXT, smtp_port TEXT, smtp_user TEXT, smtp_pass TEXT, smtp_from TEXT, smtp_to TEXT, enable_email TEXT, enable_push TEXT)",  # 9
 ]
+
+# Maps the uppercase env-var names used by the API and .env to the lowercase
+# column names in the user_settings table.
+_USER_SETTINGS_COLUMNS: Dict[str, str] = {
+    "NOTIFY_PROVIDER":   "notify_provider",
+    "NTFY_TOPIC":        "ntfy_topic",
+    "PUSHOVER_USER_KEY": "pushover_user_key",
+    "PUSHOVER_APP_TOKEN":"pushover_app_token",
+    "PUSHOVER_TOKEN":    "pushover_token",
+    "PUSHOVER_USER":     "pushover_user",
+    "SMTP_HOST":         "smtp_host",
+    "SMTP_PORT":         "smtp_port",
+    "SMTP_USER":         "smtp_user",
+    "SMTP_PASS":         "smtp_pass",
+    "FROM_EMAIL":        "smtp_from",
+    "NOTIFY_EMAIL":      "smtp_to",
+    "NOTIFY_VIA_EMAIL":  "enable_email",
+    "NOTIFY_VIA_PUSH":   "enable_push",
+}
 
 
 def _run_migrations(conn: sqlite3.Connection) -> None:
@@ -115,7 +136,58 @@ def init_db() -> sqlite3.Connection:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_settings (
+                user_id INTEGER PRIMARY KEY,
+                notify_provider TEXT,
+                ntfy_topic TEXT,
+                pushover_user_key TEXT,
+                pushover_app_token TEXT,
+                pushover_token TEXT,
+                pushover_user TEXT,
+                smtp_host TEXT,
+                smtp_port TEXT,
+                smtp_user TEXT,
+                smtp_pass TEXT,
+                smtp_from TEXT,
+                smtp_to TEXT,
+                enable_email TEXT,
+                enable_push TEXT
+            )
+            """
+        )
         _run_migrations(conn)
+        # Seed user_settings for user_id=1 from .env on first run so existing
+        # deployments don't lose their configuration.
+        if not conn.execute("SELECT 1 FROM user_settings WHERE user_id = 1").fetchone():
+            conn.execute(
+                """
+                INSERT INTO user_settings (
+                    user_id, notify_provider, ntfy_topic,
+                    pushover_user_key, pushover_app_token, pushover_token, pushover_user,
+                    smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_to,
+                    enable_email, enable_push
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    1,
+                    os.getenv("NOTIFY_PROVIDER", "ntfy"),
+                    os.getenv("NTFY_TOPIC", ""),
+                    os.getenv("PUSHOVER_USER_KEY", ""),
+                    os.getenv("PUSHOVER_APP_TOKEN", ""),
+                    os.getenv("PUSHOVER_TOKEN", ""),
+                    os.getenv("PUSHOVER_USER", ""),
+                    os.getenv("SMTP_HOST", ""),
+                    os.getenv("SMTP_PORT", ""),
+                    os.getenv("SMTP_USER", ""),
+                    os.getenv("SMTP_PASS", ""),
+                    os.getenv("FROM_EMAIL", ""),
+                    os.getenv("NOTIFY_EMAIL", ""),
+                    os.getenv("NOTIFY_VIA_EMAIL", "true"),
+                    os.getenv("NOTIFY_VIA_PUSH", "true"),
+                ),
+            )
         # One-time data migration: promote time_earliest/time_latest into time_ranges
         rows = conn.execute(
             "SELECT id, days, time_earliest, time_latest FROM restaurants "
@@ -412,6 +484,30 @@ def cancel_booking(booking_id: int) -> Optional[Dict[str, Any]]:
     with conn:
         conn.execute("UPDATE bookings SET status = 'cancelled' WHERE id = ?", (booking_id,))
     return booking
+
+
+def get_user_settings(user_id: int = 1) -> Dict[str, str]:
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM user_settings WHERE user_id = ?", (user_id,)).fetchone()
+    if not row:
+        return {env_key: "" for env_key in _USER_SETTINGS_COLUMNS}
+    return {env_key: (row[col] or "") for env_key, col in _USER_SETTINGS_COLUMNS.items()}
+
+
+def save_user_settings(settings: Dict[str, str], user_id: int = 1) -> None:
+    col_updates = {
+        col: settings[env_key]
+        for env_key, col in _USER_SETTINGS_COLUMNS.items()
+        if env_key in settings
+    }
+    if not col_updates:
+        return
+    conn = get_connection()
+    set_clause = ", ".join(f"{col} = ?" for col in col_updates)
+    values = list(col_updates.values()) + [user_id]
+    with conn:
+        conn.execute("INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)", (user_id,))
+        conn.execute(f"UPDATE user_settings SET {set_clause} WHERE user_id = ?", values)
 
 
 def remove_stale_notified_slots(

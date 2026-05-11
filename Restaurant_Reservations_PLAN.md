@@ -22,8 +22,8 @@ Key architectural decisions:
 - **SQLite only** — no external database; `restaurants.db` holds all state
 - **Notification deduplication** via a `notified_slots` table; re-notifies if a slot disappears and reappears
 - **Deep links** built in `deep_links.py`, validated with a 2-second HEAD request before sending, falling back to venue homepage if unreachable
-- **Provider abstraction** — `NOTIFY_PROVIDER=ntfy|pushover` env var selects the active push implementation with zero code changes
-- **Settings in `.env`** — all credentials/toggles written by the dashboard UI to `.env` via `_save_env()`
+- **Provider abstraction** — active push provider selected via `user_settings.notify_provider` (ntfy or pushover); `get_notifier(settings)` factory accepts a settings dict
+- **Split settings storage** — notification settings (provider, topics, SMTP, toggles) live in the `user_settings` DB table; Resy credentials, `AUTO_BOOK`, and `CHECK_INTERVAL_MINUTES` stay in `.env`; dashboard UI reads/writes both transparently
 
 ---
 
@@ -44,12 +44,12 @@ Key architectural decisions:
 - `static/style.css` — dark theme
 
 ### Stage 3 — Mobile Push Notifications ✅
-- `notifiers/` package: `BaseNotifier` ABC, `NtfyNotifier`, `PushoverNotifier`, `get_notifier()` factory
-- Provider selected via `NOTIFY_PROVIDER` env var; defaults to ntfy
+- `notifiers/` package: `BaseNotifier` ABC, `NtfyNotifier`, `PushoverNotifier`, `get_notifier(settings)` factory
+- Provider selected via `user_settings.notify_provider`; defaults to ntfy
 - ntfy: POST to `ntfy.sh/{topic}` — high priority, fork_and_knife tag, Click URL
 - Pushover: POST to api.pushover.net — priority 1, url/url_title fields
 - Settings UI: provider dropdown, ntfy topic with subscribe link + copy button, Pushover fields, Email/Push toggles, "Send test notification" button
-- `NTFY_TOPIC` auto-generated on first dashboard load and persisted to `.env`
+- `NTFY_TOPIC` auto-generated on first dashboard load and persisted to `user_settings` DB table
 
 ### Stage 4 — Smart Notification Deduplication ✅
 - `notified_slots` SQLite table: `(venue_id, date, time, party_size)` composite PK
@@ -103,47 +103,42 @@ Key architectural decisions:
 - **`static/app.js`** — `bookReservation()` (POST, loading state, toast); `cancelBooking()` (confirm dialog, DELETE); `loadBookings()` (table with status badges and Cancel buttons); `showToast()` (animated corner toast); "Book via Resy" button on log entries with `booking_params`; `loadSettings`/`saveSettings` wired to two new fields; `loadBookings()` called on init and after any book/cancel action
 - **`static/style.css`** — bookings table styles, `.status-badge` variants (confirmed/cancelled/failed), `.btn-cancel-booking`, `.btn-book-inline`, `.auto-book-warning`, toast animation
 
+### Stage 10 — Notification Settings in DB (user_settings table) ✅
+- **`app/db.py`** — `user_settings` table: `user_id INTEGER PRIMARY KEY` + one column per notification setting; `_USER_SETTINGS_COLUMNS` dict maps env-key names → column names; migration #9; `get_user_settings(user_id=1)` returns a dict keyed by env-var names; `save_user_settings(settings, user_id=1)` uses INSERT OR IGNORE + UPDATE; seeds from `.env` on first run so existing deployments keep their config
+- **`app/app.py`** — `_ENV_ONLY_KEYS` constant (`RESY_API_KEY`, `RESY_AUTH_TOKEN`, `AUTO_BOOK`, `RESY_PAYMENT_METHOD_ID`, `CHECK_INTERVAL_MINUTES`); `GET /api/settings` merges DB notification settings with env-only credentials; `POST /api/settings` routes each key to DB or `.env`; `test_notification` reads provider from DB
+- **`app/notifier.py`** — `check_restaurant()` calls `db.get_user_settings()` once per run, passes dict to `get_notifier()` and `send_email_notification()`
+- **`notifiers/__init__.py`** — `get_notifier(settings)` accepts settings dict, passes to constructors
+- **`notifiers/ntfy.py`, `notifiers/pushover.py`** — read credentials from settings dict first; fall back to `os.getenv` for backward compat with `.env`-only deployments
+- **`app/availability.py`** — `send_email_notification(restaurant, slots, smtp_settings)` reads SMTP config from settings dict first, env fallback
+- `user_id=1` hardcoded throughout; column exists for multi-user wiring later
+
 ---
 
 ## Completed This Session
 
 **Session date:** 2026-05-10
 
+### Stage 10 — Notification settings to DB (see stage entry above for full detail)
+
+### Stage 9 — One-tap Resy booking (see stage entry above for full detail)
+Key decisions:
+- Three-call sequence (`/3/details` → `/3/book` → optional `DELETE /3/reservation`) — no calls combined or skipped
+- `booking_params` stored as JSON on activity log rows (migration #7) — avoids fragile log-message parsing
+- Auto-book cooldown is per `venue_id`, not per slot, to prevent hammering on rapid fluctuations
+- Failed auto-book always falls through to normal push notification
+
 ### Availability count badge (Stage 7)
-
-- `last_slot_count INTEGER` column added to `restaurants` table (migration #8; also in fresh-DB `CREATE TABLE`)
-- `set_last_slot_count(restaurant_id, count)` added to `db.py`
-- `app/notifier.py` — `all_available: set` accumulates unique `(date, time)` tuples across all party-size × day combinations; `db.set_last_slot_count()` called at the end of each `check_restaurant()` run
-- `static/app.js` — badge rendered in the card header next to the platform badge: green "N slots" when `last_slot_count > 0`, gray "None available" when `0`, no badge before first check (`null`)
-- `static/style.css` — `.avail-badge`, `.avail-badge-some`, `.avail-badge-none` classes added
-
-### One-tap Resy booking (Stage 9)
-
-See Stage 9 above for full details. Key design decisions made this session:
-- Three-call booking sequence (`/3/details` → `/3/book` → optional `/3/reservation` DELETE) implemented exactly as specified; no calls are combined or skipped
-- `booking_params` stored as JSON on activity log entries (migration #7) rather than parsing log message text — lets the frontend attach a "Book via Resy" button to the exact slot without fragile string parsing
-- `CREATE TABLE IF NOT EXISTS bookings` appears in both `init_db()` (for fresh DBs) and migration #6 (for existing DBs); the fresh-DB stamp-to-target path already skips migration execution, so having both is the correct pattern
-- Auto-book cooldown is per `venue_id` (not per slot) to prevent hammering a single restaurant on rapid fluctuations
-- Failed auto-book always falls through to the normal availability notification — the user is never left unaware of a slot
+- `last_slot_count INTEGER` column added to `restaurants` table (migration #8)
+- `set_last_slot_count(restaurant_id, count)` in `db.py`
+- `notifier.py` accumulates unique `(date, time)` tuples across all party-size × day combos; calls `set_last_slot_count` at end of each `check_restaurant()` run
+- `app.js` — green "N slots" badge when `> 0`, gray "None available" when `0`, no badge before first check
 
 ### Help / How To Use page
-
-**`GET /help` route and `templates/help.html`** (2026-05-10)
-- Added `GET /help` route in `app/app.py` that renders `help.html`
-- Added **Help** nav link in `templates/index.html` header controls (left of Check Now)
-- Created `templates/help.html` — fully static, no JS required, mobile-responsive
-- Dark theme reuses existing CSS variables and classes from `style.css`; no new frameworks or CDN deps
-- Sticky two-column layout (TOC sidebar + content) collapses to single column on ≤860 px
+- `GET /help` route → `templates/help.html`; **Help** nav link added to `index.html`
+- Fully static, no JS, mobile-responsive; dark theme via existing CSS variables
+- Sticky TOC sidebar + content; collapses to single column on ≤860 px
 - Sections: Getting Started · Adding a Restaurant · Notification Setup · Reading the Activity Log · Check Scheduling · Bookings & One-Tap Booking · Deep Links · Tips & Troubleshooting
-
-### Help page — Bookings section (Priority 2)
-
-**`templates/help.html`** (2026-05-10)
-- Added **Bookings & One-Tap Booking** section (new 6th section, before Deep Links) with TOC entry
-- Documents the Bookings panel: confirmed/cancelled/failed status badges, Cancel button behaviour, caveat that direct Resy cancellations don't sync back
-- Documents the **Book via Resy** button: 3-step flow (`/3/details` → `/3/book` → toast + panel update), error handling if slot is taken mid-flow
-- Documents **Auto-Book** toggle: what it does, the credit card requirement callout, 60-second per-restaurant cooldown, all five safety guardrails, payment method override field
-- Added **Booking error messages** table in Tips & Troubleshooting (slot taken, no card, expired token, network timeout)
+- **Booking error messages** table in Tips & Troubleshooting
 
 ---
 
@@ -244,7 +239,10 @@ See Stage 9 above for full details. Key design decisions made this session:
 
 ## Next Actions
 
-### Priority 1 — End-to-end live test of booking flow
+### Priority 1 — Multi-user wiring
+Wire `user_id` from Flask session/auth context into `get_user_settings()` / `save_user_settings()` once auth is added (currently hardcoded to 1).
+
+### Priority 2 — End-to-end live test of booking flow
 Run a full cycle with a real Resy restaurant that has open slots and verify:
 - `GET /3/details` returns a valid `config_id` and `payment_method_id`
 - `POST /3/book` completes and returns a `resy_token`
@@ -253,8 +251,9 @@ Run a full cycle with a real Resy restaurant that has open slots and verify:
 - Auto-book fires correctly with `AUTO_BOOK=true` and the cooldown is respected
 - Failed booking falls through to normal push notification
 
-### Priority 2 — Unit tests
+### Priority 3 — Unit tests
 Add tests for:
 - `resy_api.py` booking methods (mock HTTP responses for `/3/details`, `/3/book`, `/3/reservation`)
 - `deep_links.py` URL construction and fallback logic
 - `notifiers/` send payloads
+- `db.get_user_settings()` / `db.save_user_settings()` round-trip

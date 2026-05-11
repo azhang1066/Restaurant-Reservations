@@ -9,8 +9,11 @@ logger = logging.getLogger(__name__)
 
 
 class NtfyNotifier(BaseNotifier):
+    def __init__(self, settings: dict = None) -> None:
+        self._settings = settings or {}
+
     def send(self, restaurant_name: str, slot: dict, urls: dict) -> bool:
-        topic = os.getenv("NTFY_TOPIC", "").strip()
+        topic = (self._settings.get("NTFY_TOPIC") or os.getenv("NTFY_TOPIC", "")).strip()
         if not topic:
             logger.warning("NTFY_TOPIC not configured")
             return False

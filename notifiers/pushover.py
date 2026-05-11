@@ -9,9 +9,12 @@ logger = logging.getLogger(__name__)
 
 
 class PushoverNotifier(BaseNotifier):
+    def __init__(self, settings: dict = None) -> None:
+        self._settings = settings or {}
+
     def send(self, restaurant_name: str, slot: dict, urls: dict) -> bool:
-        user_key = os.getenv("PUSHOVER_USER_KEY", "").strip()
-        app_token = os.getenv("PUSHOVER_APP_TOKEN", "").strip()
+        user_key = (self._settings.get("PUSHOVER_USER_KEY") or os.getenv("PUSHOVER_USER_KEY", "")).strip()
+        app_token = (self._settings.get("PUSHOVER_APP_TOKEN") or os.getenv("PUSHOVER_APP_TOKEN", "")).strip()
 
         if not user_key or not app_token:
             logger.warning("Pushover credentials not configured (PUSHOVER_USER_KEY / PUSHOVER_APP_TOKEN)")

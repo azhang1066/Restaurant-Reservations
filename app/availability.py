@@ -56,13 +56,14 @@ def check_opentable_availability(rid: str, party_size: int, date: str) -> list[T
     return create_opentable_client().get_availability(rid, party_size, date)
 
 
-def send_email_notification(restaurant: dict, slots: list[TimeSlot]) -> bool:
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = os.getenv("SMTP_PORT")
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASS")
-    notify_email = os.getenv("NOTIFY_EMAIL")
-    from_email = os.getenv("FROM_EMAIL") or smtp_user
+def send_email_notification(restaurant: dict, slots: list[TimeSlot], smtp_settings: dict = None) -> bool:
+    s = smtp_settings or {}
+    smtp_host = s.get("SMTP_HOST") or os.getenv("SMTP_HOST")
+    smtp_port = s.get("SMTP_PORT") or os.getenv("SMTP_PORT")
+    smtp_user = s.get("SMTP_USER") or os.getenv("SMTP_USER")
+    smtp_pass = s.get("SMTP_PASS") or os.getenv("SMTP_PASS")
+    notify_email = s.get("NOTIFY_EMAIL") or os.getenv("NOTIFY_EMAIL")
+    from_email = s.get("FROM_EMAIL") or os.getenv("FROM_EMAIL") or smtp_user
 
     if not all([smtp_host, smtp_port, smtp_user, smtp_pass, notify_email]):
         logger.warning("Email configuration incomplete, skipping notification")

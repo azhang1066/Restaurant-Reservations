@@ -55,9 +55,10 @@ def check_restaurant(restaurant: dict) -> None:
         db.add_activity_log(msg, "warning")
         return
 
-    push_enabled = os.getenv("NOTIFY_VIA_PUSH", "true").lower() == "true"
-    email_enabled = os.getenv("NOTIFY_VIA_EMAIL", "true").lower() == "true"
-    notifier = get_notifier()
+    user_settings = db.get_user_settings()
+    push_enabled = user_settings.get("NOTIFY_VIA_PUSH", "true").lower() == "true"
+    email_enabled = user_settings.get("NOTIFY_VIA_EMAIL", "true").lower() == "true"
+    notifier = get_notifier(user_settings)
 
     # Tracks (date, time) combos already notified this run so a lower-priority
     # party size doesn't duplicate a notification for the same slot.
@@ -236,7 +237,7 @@ def check_restaurant(restaurant: dict) -> None:
 
             if email_enabled and actually_notified:
                 restaurant_for_email = {**restaurant, "party_size": party_size}
-                if not send_email_notification(restaurant_for_email, actually_notified):
+                if not send_email_notification(restaurant_for_email, actually_notified, user_settings):
                     db.add_activity_log(
                         f"❌ Notification failed · email — {restaurant['name']} ({len(actually_notified)} slot(s))",
                         "error",

@@ -209,50 +209,48 @@ def list_logs():
     return jsonify(db.get_recent_logs())
 
 
+# Keys that must stay in .env (Resy credentials, booking flags, scheduler config).
+# Everything else is a notification setting and lives in user_settings in the DB.
+_ENV_ONLY_KEYS = {"RESY_API_KEY", "RESY_AUTH_TOKEN", "AUTO_BOOK", "RESY_PAYMENT_METHOD_ID", "CHECK_INTERVAL_MINUTES"}
+
+
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
-    env = _load_env()
+    user_settings = db.get_user_settings()
 
     # Auto-generate a random ntfy topic on first load so the user has one ready
-    if not env.get("NTFY_TOPIC"):
+    if not user_settings.get("NTFY_TOPIC"):
         suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-        env["NTFY_TOPIC"] = f"resy-notifier-{suffix}"
-        _save_env({"NTFY_TOPIC": env["NTFY_TOPIC"]})
+        user_settings["NTFY_TOPIC"] = f"resy-notifier-{suffix}"
+        db.save_user_settings({"NTFY_TOPIC": user_settings["NTFY_TOPIC"]})
 
-    keys = [
-        "SMTP_HOST",
-        "SMTP_PORT",
-        "SMTP_USER",
-        "SMTP_PASS",
-        "NOTIFY_EMAIL",
-        "FROM_EMAIL",
-        "PUSHOVER_TOKEN",
-        "PUSHOVER_USER",
-        "NOTIFY_PROVIDER",
-        "NTFY_TOPIC",
-        "PUSHOVER_USER_KEY",
-        "PUSHOVER_APP_TOKEN",
-        "NOTIFY_VIA_EMAIL",
-        "NOTIFY_VIA_PUSH",
-        "RESY_API_KEY",
-        "RESY_AUTH_TOKEN",
-        "AUTO_BOOK",
-        "RESY_PAYMENT_METHOD_ID",
-    ]
-    return jsonify({key: env.get(key, "") for key in keys})
+    env = _load_env()
+    return jsonify({
+        **user_settings,
+        "RESY_API_KEY": env.get("RESY_API_KEY", ""),
+        "RESY_AUTH_TOKEN": env.get("RESY_AUTH_TOKEN", ""),
+        "AUTO_BOOK": env.get("AUTO_BOOK", ""),
+        "RESY_PAYMENT_METHOD_ID": env.get("RESY_PAYMENT_METHOD_ID", ""),
+    })
 
 
 @app.route("/api/settings", methods=["POST"])
 def save_settings():
     payload = request.get_json(force=True)
-    _save_env(payload)
+    env_settings = {k: v for k, v in payload.items() if k in _ENV_ONLY_KEYS}
+    db_settings = {k: v for k, v in payload.items() if k not in _ENV_ONLY_KEYS}
+    if env_settings:
+        _save_env(env_settings)
+    if db_settings:
+        db.save_user_settings(db_settings)
     return jsonify({"success": True})
 
 
 @app.route("/api/test-notification", methods=["POST"])
 def test_notification():
-    notifier = get_notifier()
-    provider = os.getenv("NOTIFY_PROVIDER", "ntfy")
+    user_settings = db.get_user_settings()
+    notifier = get_notifier(user_settings)
+    provider = user_settings.get("NOTIFY_PROVIDER") or "ntfy"
     test_slot = {
         "date": datetime.now().strftime("%Y-%m-%d"),
         "time": "19:30",
